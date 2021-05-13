@@ -1,0 +1,463 @@
+---
+title: "Chlorophyll Calibration Range Analysis"
+output: html_notebook
+---
+
+This notebook was created to determine the calibration range required for the Hakai chlorophyll fluorometers. The historical time-series of Hakai chlorophyll data are investigated to see the range of raw field data fluorometer values in comparison to calibration standard values. Raw field values are used as this represents the concentrated concentration without corrections for volume filtered. 
+
+```{r}
+# install.packages("flextable")
+# install.packages("officer")
+```
+
+```{r}
+library(tidyverse)
+library(flextable)
+library(officer)
+```
+
+```{r}
+#Import Chl dataset
+chl <- read.csv("rfu_range.csv")
+
+#Set date format
+chl$calibration <- as.Date(chl$calibration, "%Y-%m-%d")
+
+#Import HPLC for comparison
+hplc <- read.csv("hplc.csv")
+
+```
+
+
+```{r}
+#Histogram of field RFUs for instrument 0982, filtering for accepted values and 250mL filtration, and separating by calibrations. Vertical lines represent calibration RFU max and instrument RFU max (maximum RFU we know the RFU-Chl relationship remains linear). WHY DIDN'T I INCLUDE 10 ML EXTRACTION - THERE ARE SOME SAMPLES WITH WAY LESS - JS, WHICH WOULD CAUSE > CONCENTRATION OF PIGMENTS.
+
+chl %>% 
+  filter(chla_flag == "AV" & volume == 250 &
+         flurometer_serial_no == "720000982") %>% 
+  ggplot(mapping = aes(before_acid)) +
+  geom_histogram(color = "black", fill = "#FF6666", alpha = 0.8, 
+                 binwidth = 50000) +  
+  facet_wrap(~calibration, nrow = 2) +
+  coord_cartesian(ylim = c(0,1000)) +
+  geom_vline(aes(xintercept = 465512.53), linetype = "dashed", size = 1.2, 
+             color = "Blue") +
+  geom_vline(data = filter(chl, calibration == "2015-03-16"),
+             aes(xintercept = 49826.06), linetype = "dashed", size = 1.2) +
+  geom_vline(data = filter(chl, calibration == "2016-04-16"),
+              aes(xintercept = 177511.25), linetype = "dashed", size = 1.2) +
+  geom_vline(data = filter(chl, calibration == "2017-05-02"),
+              aes(xintercept = 144014.57), linetype = "dashed", size = 1.2) +
+  geom_vline(data = filter(chl, calibration == "2018-05-04"),
+              aes(xintercept = 465512.53), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  geom_vline(data = filter(chl, calibration == "2019-05-09"),
+             aes(xintercept = 464944.34), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  theme_bw() +
+  labs(x = "Field Sample RFU",
+       y = "Count") +
+  theme(text = element_text(size = 25))
+
+ggsave(filename="0982_RFU_cali.png", width=16, height=10, dpi=300)
+```
+
+```{r}
+#Histogram of field RFUs for instrument 1154, filtering for accepted values and 250mL filtration, and separating by calibrations. Vertical lines represent calibration RFU max and instrument RFU max (maximum RFU we know the RFU-Chl relationship remains linear)
+
+chl %>% 
+  filter(chla_flag == "AV" & volume == 250 & 
+         flurometer_serial_no == "720001154") %>% 
+  ggplot(mapping = aes(before_acid)) +
+  geom_histogram(color = "black", fill = "#FF6666", alpha = 0.8, 
+                 binwidth = 50000) +  
+  facet_wrap(~calibration, nrow = 3) +
+  coord_cartesian(ylim = c(0,100)) +
+  geom_vline(aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  geom_vline(data = filter(chl, calibration == "2015-03-19"),
+             aes(xintercept = 209282.28), linetype = "dashed", size = 1.2) +
+  geom_vline(data = filter(chl, calibration == "2015-08-06"),
+              aes(xintercept = 214818.29), linetype = "dashed", size = 1.2) +
+  geom_vline(data = filter(chl, calibration == "2016-05-04"),
+              aes(xintercept = 217038.78), linetype = "dashed", size = 1.2) +
+  geom_vline(data = filter(chl, calibration == "2017-01-08"),
+              aes(xintercept = 232313.32), linetype = "dashed", size = 1.2) +
+  geom_vline(data = filter(chl, calibration == "2017-08-16"),
+              aes(xintercept = 207934.67), linetype = "dashed", size = 1.2) +
+  geom_vline(data = filter(chl, calibration == "2019-05-09"),
+             aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  labs(x = "Field Sample RFU",
+       y = "Count") +
+  theme_bw() +
+  theme(text = element_text(size = 25))
+
+ggsave(filename="1154_RFU_cali.png", width=16, height=14, dpi=300)
+  
+```
+
+```{r}
+#Plotting field RFUS by instrument and filter type to help determine what filters types will require greater extraction volumes or dilutions.
+
+#Set order of filter types for plotting
+chl$filter_type_2 <- factor(chl$filter_type, 
+                            levels=c("Bulk GF/F","20um","3um","2um","GF/F"))
+
+#Make plot using only maximum calibration RFU for each instrument - MADE A MISTAKE AND USED 1154 MAX FOR 0982.
+chl %>% 
+  filter(chla_flag == "AV" & !is.na(flurometer_serial_no) & 
+         volume == 250 & (filter_type == "GF/F" | filter_type == "3um" | 
+                          filter_type == "20um" | filter_type == "Bulk GF/F")) %>% 
+  ggplot(mapping = aes(before_acid)) +
+  geom_histogram(color = "black", fill = "#FF6666", alpha = 0.8, 
+                 binwidth = 50000) +  
+  facet_grid(filter_type_2 ~ flurometer_serial_no) +
+  coord_cartesian(ylim = c(0,100)) +
+  geom_vline(data = filter(chl, flurometer_serial_no == "720001154" &
+                             filter_type == "Bulk GF/F"),
+             aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  geom_vline(data = filter(chl, flurometer_serial_no == "720001154" &
+                             filter_type == "20um"),
+             aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  geom_vline(data = filter(chl, flurometer_serial_no == "720001154" &
+                             filter_type == "3um"),
+             aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  geom_vline(data = filter(chl, flurometer_serial_no == "720001154" &
+                             filter_type == "GF/F"),
+             aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+    geom_vline(data = filter(chl, flurometer_serial_no == "720000982" &
+                             filter_type == "Bulk GF/F"),
+             aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  geom_vline(data = filter(chl, flurometer_serial_no == "720000982" &
+                             filter_type == "20um"),
+             aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  geom_vline(data = filter(chl, flurometer_serial_no == "720000982" &
+                             filter_type == "3um"),
+             aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  geom_vline(data = filter(chl, flurometer_serial_no == "720000982" &
+                             filter_type == "GF/F"),
+             aes(xintercept = 608900.62), linetype = "dashed", size = 1.2,
+             color = "blue") +
+  labs(x = "Field Sample RFU",
+       y = "Count") +
+  theme_bw() +
+  theme(text = element_text(size = 25))
+
+ggsave(filename="size_distributions_2.png", width=12, height=14, dpi=300)
+```
+
+```{r}
+#Creating table to see how many samples fall above calibrated range for each instrument calibration and for the max RFU calibrations performed at DFO.
+
+#creating data frame of calibrations and max raw values for each.
+cali_max <- tribble(~flurometer_serial_no, ~calibration, ~raw_max,
+                   720001154, "2015-03-19", 207968.23, 
+                   720001154, "2015-08-06", 212901.41,
+                   720001154, "2016-05-04", 215550.85,
+                   720001154, "2017-01-08", 230431.56,
+                   720001154, "2017-08-16", 206334.59,
+                   720001154, "2018-05-04", 591756.71,
+                   720001154, "2019-05-09", 608507.24,
+                   720000982, "2015-03-16", 49023,
+                   720000982, "2016-04-16", 176792.58,
+                   720000982, "2017-05-02", 143410.61,
+                   720000982, "2018-05-04", 465512.53,
+                   720000982, "2019-05-09", 464572.49
+                   )
+
+#Setting date
+cali_max$calibration <- as.Date(cali_max$calibration)
+
+
+#Joining field data to max calibration RFUs defined above (serial # and calibration data shared between data frames)
+cali_join <- chl %>% 
+  select(date, site_id, line_out_depth, volume, calibration, 
+         flurometer_serial_no, filter_type, before_acid, after_acid, 
+         chla, chla_flag, phaeo) %>% 
+  left_join(cali_max, by = c("calibration", "flurometer_serial_no"))
+
+
+#Adding columns with the maximum RFU from the DFO calibrations - assuming calibration relationship is linear to this point, samples from lower range calibrations should still be OK up until this max threshold.
+cali_join <- cali_join %>% 
+  mutate(dfo_max = case_when(flurometer_serial_no == 720000982 ~ 465512.53,
+                             flurometer_serial_no == 720001154 ~ 608507.24))
+
+#Creating summary statistics
+cali_summary <- cali_join %>%
+  filter(!is.na(raw_max) & !is.na(flurometer_serial_no) & 
+         volume == 250 & chla_flag == "AV") %>% 
+  group_by(calibration, flurometer_serial_no) %>% 
+  summarise(instrument = mean(flurometer_serial_no),
+            per = scales::percent(mean(before_acid > raw_max)),
+            num = sum(before_acid > raw_max),
+            per_dfo = scales::percent(mean(before_acid > dfo_max)),
+            num_dfo = sum(before_acid > dfo_max),
+            num_tot = n(),
+            chl_min_below = min(chla[before_acid < raw_max]),
+            chl_max_below = max(chla[before_acid < raw_max]),
+            chl_min_above = min(chla[before_acid > raw_max]),
+            chl_max_above = max(chla[before_acid > raw_max]),
+            rfu_max = max(before_acid)) %>% 
+  arrange(instrument, calibration)
+
+#Attempting to make a table within R to limit copy and pasting into word
+cali_summary_table <- cali_summary %>% 
+  left_join(cali_max) %>% 
+  mutate(across(is.numeric, ~ round(., 2))) %>%  
+  mutate(serial_num = case_when(instrument == 720000982 ~ "0982",
+                                instrument == 720001154 ~ "1154")) %>% 
+  unite("percent_num", per, num, sep = " (", remove = FALSE) %>% 
+  unite("chl_below", chl_min_below, chl_max_below, sep = " - ", remove = FALSE) %>% 
+  unite("chl_above", chl_min_above, chl_max_above, sep = " - ", remove = FALSE) %>% 
+  select(calibration, serial_num, raw_max, percent_num, chl_below, chl_above) %>% 
+  qflextable()
+  
+#This actually creates the R created word format table - crashes system if run when output word document is open.
+# read_docx() %>%
+#   body_add_flextable(value = cali_summary_table) %>%
+#   print(target = "cali_summary.docx")
+```
+
+
+```{r}
+#Now I want to find the min and max chlorophyll values above the threshold
+#Make a histogram with chl values separated by below threshold and above.
+
+
+cali_below <- cali_join %>% 
+  filter(!is.na(raw_max) & !is.na(flurometer_serial_no), 
+         volume == 250 & chla_flag == "AV") %>% 
+  filter(before_acid < raw_max) %>% 
+  select(date:line_out_depth, calibration, flurometer_serial_no,
+         chl_below = chla)
+
+cali_above <- cali_join %>% 
+  filter(!is.na(raw_max) & !is.na(flurometer_serial_no), 
+         volume == 250 & chla_flag == "AV") %>% 
+  filter(before_acid > raw_max) %>% 
+  select(date:line_out_depth, calibration, flurometer_serial_no,
+         chl_above = chla)
+
+cali_below_dfo <- cali_join %>% 
+  filter(!is.na(raw_max) & !is.na(flurometer_serial_no), 
+         volume == 250 & chla_flag == "AV") %>% 
+  filter(before_acid < dfo_max) %>% 
+  select(date:line_out_depth, calibration, flurometer_serial_no,
+         chl_below_dfo = chla)
+
+cali_above_dfo <- cali_join %>% 
+  filter(!is.na(raw_max) & !is.na(flurometer_serial_no), 
+         volume == 250 & chla_flag == "AV") %>% 
+  filter(before_acid > dfo_max) %>% 
+  select(date:line_out_depth, calibration, flurometer_serial_no,
+         chl_above_dfo = chla)
+
+chl_compare <- cali_below %>% 
+  left_join(cali_above) %>% 
+  pivot_longer(c(chl_below, chl_above),
+               names_to = "thresh", values_to = "chla")
+
+chl_compare_dfo <- cali_below_dfo %>% 
+  left_join(cali_above_dfo) %>% 
+  pivot_longer(c(chl_below_dfo, chl_above_dfo),
+               names_to = "thresh", values_to = "chla")
+```
+
+
+```{r}
+chl_compare %>% 
+  filter(flurometer_serial_no == "720000982") %>%
+  ggplot(aes(chla, color = thresh, fill = thresh)) +
+  geom_histogram(position = "identity", binwidth = 1 , alpha = 0.4) +
+  facet_wrap(~calibration, nrow = 2) +
+  theme_bw() +
+  coord_cartesian(ylim = c(0,150)) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = c("#ff2d26", "#26e2ff"),
+                     name = "",
+                     labels = c("Above_Cali_RFU","Below_Cali_RFU")) +
+  scale_fill_manual(values = c("#ff2d26", "#26e2ff"),
+                    name = "",
+                    labels = c("Above_Cali_RFU","Below_Cali_RFU")) +
+  theme(legend.position = c(0.55, 0.39),
+        legend.background =  element_blank()) +
+  labs(x = "Chl (ug/L)",
+       y = "Count") #+
+  #theme(text = element_text(size = 25))
+  
+ggsave(filename="Chl_dist.png", width=16, height=8, dpi=300)   
+```
+```{r}
+chl_compare_dfo %>% 
+  filter(flurometer_serial_no == "720000982") %>%
+  ggplot(aes(chla, color = thresh, fill = thresh)) +
+  geom_histogram(position = "identity", binwidth = 1 , alpha = 0.4) +
+  facet_wrap(~calibration, nrow = 2) +
+  theme_bw() +
+  coord_cartesian(ylim = c(0,25)) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = c("#ff2d26", "#26e2ff"),
+                     name = "",
+                     labels = c("Above_DFO-Cali_RFU","Below_DFO-Cali_RFU")) +
+  scale_fill_manual(values = c("#ff2d26", "#26e2ff"),
+                    name = "",
+                    labels = c("Above_DFO-Cali_RFU","Below_DFO-Cali_RFU")) +
+  theme(legend.position = c(0.53, 0.39),
+        legend.background =  element_blank()) +
+  labs(x = "Chl (ug/L)",
+       y = "Count") +
+  theme(text = element_text(size = 25))
+  
+ggsave(filename="0982_Chl_dist_DFO.png", width=16, height=8, dpi=300)
+```
+
+
+```{r}
+chl_compare %>% 
+  filter(flurometer_serial_no == "720001154") %>%
+  ggplot(aes(chla, color = thresh, fill = thresh)) +
+  geom_histogram(position = "identity", binwidth = 1 , alpha = 0.4) +
+  scale_color_manual(values = c("#00AFBB", "#E7B800")) +
+  scale_fill_manual(values = c("#00AFBB", "#E7B800")) +
+  facet_(~calibration, nrow = 2) +
+  theme_bw() +
+  coord_cartesian(ylim = c(0,50)) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = c("#ff2d26", "#26e2ff"),
+                     name = "",
+                     labels = c("Above_Cali_RFU","Below_Cali_RFU")) +
+  scale_fill_manual(values = c("#ff2d26", "#26e2ff"),
+                    name = "",
+                    labels = c("Above_Cali_RFU","Below_Cali_RFU")) +
+  theme(legend.position = c(0.55, 0.39),
+        legend.background =  element_blank()) +
+  labs(x = "Chl (ug/L)",
+       y = "Count") +
+  theme(text = element_text(size = 25))
+
+ggsave(filename="1154_Chl_dist.png", width=16, height=8, dpi=300)
+```
+```{r}
+chl_compare_dfo %>% 
+  ggplot(aes(chla, color = thresh, fill = thresh)) +
+  geom_histogram(position = "identity", binwidth = 1 , alpha = 0.4) +
+  facet_wrap(~ flurometer_serial_no) +
+  theme_bw() +
+  coord_cartesian(ylim = c(0,40)) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = c("#ff2d26", "#26e2ff"),
+                     name = "",
+                     labels = c("> DFO Max RFU","< DFO Max RFU")) +
+  scale_fill_manual(values = c("#ff2d26", "#26e2ff"),
+                    name = "",
+                    labels = c("> DFO Max RFU","< DFO Max RFU")) +
+  theme(legend.position = c(0.87, 0.95),
+        legend.background =  element_blank()) +
+  labs(x = "Chl (ug/L)",
+       y = "Count") +
+  theme(text = element_text(size = 15))
+
+ggsave(filename="Chl_dist.png", width=8, height=4, dpi=300)
+```
+
+```{r}
+chl_compare_dfo %>% 
+  filter(flurometer_serial_no == "720001154") %>%
+  ggplot(aes(chla, color = thresh, fill = thresh)) +
+  geom_histogram(position = "identity", binwidth = 1 , alpha = 0.4) +
+  facet_wrap(~calibration, nrow = 2) +
+  theme_bw() +
+  coord_cartesian(ylim = c(0,25)) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = c("#ff2d26", "#26e2ff"),
+                     name = "",
+                     labels = c("Above_DFO-Cali_RFU","Below_DFO-Cali_RFU")) +
+  scale_fill_manual(values = c("#ff2d26", "#26e2ff"),
+                    name = "",
+                    labels = c("Above_DFO-Cali_RFU","Below_DFO-Cali_RFU")) +
+  theme(legend.position = c(0.53, 0.39),
+        legend.background =  element_blank()) +
+  labs(x = "Chl (ug/L)",
+       y = "Count") +
+  theme(text = element_text(size = 25))
+  
+ggsave(filename="1154_Chl_dist_DFO.png", width=16, height=8, dpi=300)
+```
+
+
+
+```{r}
+#Does the relationship stay linear above the threshold? Join with QU39 HPLC and see?
+
+#Selecting QU39 HPLC analyzed by USC and removing unused columns for joining with chl.
+hplc_qu39 <- hplc %>% 
+  filter(site_id == "QU39", analyzing_lab == "USC") %>% 
+  select(date, site_id, line_out_depth, all_chl_a) %>% 
+  group_by(date, line_out_depth) %>% 
+  summarise(dm_all_chla = mean(all_chl_a))
+
+chl_qu39 <- cali_join %>% 
+  filter(!is.na(raw_max) & !is.na(flurometer_serial_no) & 
+         volume == 250 & chla_flag == "AV" & site_id == "QU39" & 
+         filter_type == "Bulk GF/F") %>% 
+  group_by(date, line_out_depth) %>% 
+  mutate(dm_chl = mean(chla)) %>% 
+  distinct(dm_chl, .keep_all = TRUE)
+  
+hplc_chl <- hplc_qu39 %>% 
+  left_join(chl_qu39)
+
+hplc_chl <- hplc_chl %>% 
+  mutate(above_below = (before_acid > raw_max)) %>% 
+  mutate(above_below_dfo = (before_acid > dfo_max))
+
+hplc_chl <- hplc_chl %>% 
+  mutate(dfo_thresh = case_when(dm_all_chla < 4 & above_below_dfo == "TRUE" ~ "outlier",
+                             before_acid > dfo_max ~ "above",
+                             before_acid < dfo_max ~ "below"))
+
+max_rfu_qu39 <- hplc_chl %>% 
+  filter(dfo_thresh == "above")
+
+hplc_chl %>% 
+  filter(!is.na(above_below_dfo)) %>% 
+  ggplot(aes(dm_all_chla, dm_chl, color = dfo_thresh)) +
+  geom_point() +
+  geom_smooth(data = subset(hplc_chl, !dfo_thresh == "outlier"), method=lm) +
+  geom_abline(slope = 1, intercept = 0) +
+  coord_cartesian(ylim = c(0, 20), xlim = c(0, 20)) +
+  labs(x = "HPLC - ALL Chla (ug/L)",
+       y = "Fluor. Chl (ug/L)") +
+  scale_color_discrete(name = "", labels = c("> DFO Cali. RFU",
+                                             "< DFO Cali. RFU",
+                                             "Outlier")) +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.15),
+        legend.background =  element_blank()) +
+  theme(text = element_text(size = 12))
+
+
+ggsave(filename="scatter_panel.png", width = 5, height = 4, dpi = 300)
+
+```
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

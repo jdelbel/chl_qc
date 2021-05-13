@@ -1,0 +1,59 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This script is meant to track the Trilogy benchtop chlorophyll fluorometer calibrations. Issues with historical calibrations are also diagnosed.
+
+```{r}
+#Load packages
+library(tidyverse)
+library(readxl)
+library(here)
+```
+
+```{r}
+#Upload calibration sheet
+cali <- read_xlsx(here("files", "instrument_calibrations.xlsx"))
+```
+
+```{r}
+#Let's look at the different calibrations together
+cali %>% 
+  ggplot(aes(`chl standard concentration`, `Rb (Blank Subtracted)`, color = as.character(Date))) +
+  geom_point() +
+  geom_smooth(model = "lm", fullrange = TRUE) +
+  facet_wrap(~ `Fluorometer #`)
+```
+```{r}
+#Let's look at the different calibrations together
+cali %>%
+  filter(`Fluorometer #` == "720000982") %>% 
+  ggplot(aes(`chl standard concentration`, `Calc. Chl`, color = as.character(Date))) +
+  geom_point() +
+  geom_smooth(model = "lm", fullrange = TRUE) +
+  facet_wrap(~ `Fluorometer #`)
+```
+```{r}
+#Let's look at the different calibrations together
+cali %>%
+  filter(`Fluorometer #` == "720000982") %>% 
+  ggplot(aes(`chl standard concentration`, `Raw Before Acid`, fill = as.character(Date))) + 
+  geom_point(size= 3 , shape = 21, color = "black") +
+  geom_smooth(model = "lm_right", fullrange = TRUE, se = FALSE) +
+  scale_x_continuous(expand=c(0,0), limits=c(0,320)) +
+  scale_y_continuous(expand=c(0,0), limits=c(-50,500000)) +
+  coord_cartesian(xlim=c(0,320), ylim=c(0,500000)) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_brewer(palette = "Dark2") +
+  theme_bw() 
+  # facet_wrap(~ as.character(Date), nrow = 2)
+```
+
+
+
+
+
+
+
+
