@@ -42,21 +42,105 @@ cali_manip <- cali_manip %>%
   mutate(fm_flag = case_when(fm_blank_corr < 1.60 | fm_blank_corr > 1.90 ~ "SVC",
                              fm_blank_corr > 1.60 & fm_blank_corr <1.90 ~ "AV"))
 
-#Calculating ratio between chlorophyll standard concentration and rb_blank_corr
-cali_manip <-  cali_manip %>% 
-  mutate(raw_chl_rat = ra_blank_corr/`chl standard concentration`)
 
-#Removing columns I don't need
+#Removing columns I don't need -  Should Really add the slope I derived in excel and that is currently applied to the data on the portal.
 cali_manip <- cali_manip %>% 
   select(date = Date, flu_num = `Fluorometer #`, 
          chl_std_conc = `chl standard concentration`, bb = `Blank Before Acid`,
          ba = `Blank After Acid`, rb = `Raw Before Acid`, ra = `Raw After Acid`,
-         rb_blank_corr:fm_blank_corr, fm_flag, raw_chl_rat, 
-         excel_chl = `Calc. Chl`, excel_phaeo = `Calc. Phaeo`)
+         rb_blank_corr:fm_blank_corr, fm_flag, 
+         excel_chl = `Calc. Chl`, excel_phaeo = `Calc. Phaeo`, lab)
 
-#Determining 
+#Calculating ratio of raw count to chl standard to investigate variability in slope
+cali_manip <- cali_manip %>% 
+  mutate(slope_ratio = chl_std_conc/rb_blank_corr)
 
 ```
+
+```{r}
+
+cali_manip %>% 
+  filter(fm_flag == "AV") %>% 
+  ggplot(aes(factor(date), fm_blank_corr, fill = lab)) +
+  geom_boxplot() +
+  facet_wrap(~ factor(flu_num))
+
+cali_manip %>% 
+  filter(fm_flag == "AV") %>% 
+  ggplot(aes(factor(date), slope_ratio*10000, fill = lab)) +
+  geom_boxplot() +
+  facet_wrap(~ factor(flu_num))
+
+```
+
+```{r}
+p1 <- cali_manip %>% 
+  filter(fm_flag == "AV" & flu_num == 720001154 & !as.character(date) == "2018-04-17") %>% 
+  ggplot(aes(factor(date), slope_ratio*10000, fill = lab)) +
+  geom_boxplot() +
+  theme_bw() +
+  ylim(3, 8) +
+  labs(title = "Instrument #1154",
+       y = "Chl. Standard (ug/L)/Raw Count * 10000",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 20)) 
+
+p2 <- cali_manip %>% 
+  filter(fm_flag == "AV" & flu_num == 720000982 & !as.character(date) == "2018-04-17") %>% 
+  ggplot(aes(factor(date), slope_ratio*10000, fill = lab)) +
+  geom_boxplot() +
+  theme_bw() +
+  ylim(3, 8) +
+  labs(title = "Instrument #0982",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1", name = "Cali. Lab") +
+  theme(legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 20)) 
+
+p3 <- cali_manip %>% 
+  filter(fm_flag == "AV" & flu_num == 720001154 & !as.character(date) == "2018-04-17") %>%
+  ggplot(aes(factor(date), fm_blank_corr, fill = lab)) +
+  geom_boxplot() +
+  theme_bw() +
+  ylim(1.6, 1.9) +
+  labs(y = "Acid Ratio (fm)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        text = element_text(size = 20)) 
+  
+
+p4 <- cali_manip %>% 
+  filter(fm_flag == "AV" & flu_num == 720000982 & !as.character(date) == "2018-04-17") %>% 
+  ggplot(aes(factor(date), fm_blank_corr, fill = lab)) +
+  geom_boxplot() +
+  theme_bw() +
+  ylim(1.6, 1.9) +
+  ylim(1.6, 1.9) +
+  labs(y = "Acid Ratio (fm)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        text = element_text(size = 20)) 
+  
+fig <- p1 + p2 + p3 + p4
+
+ggsave(here("figures", "slope_fm_compare.png"), fig , width=16, height=15, dpi=300)
+```
+
+
+
+
 
 
 ```{r}
