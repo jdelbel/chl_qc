@@ -10,6 +10,8 @@ This script is meant to track the Trilogy benchtop chlorophyll fluorometer calib
 library(tidyverse)
 library(readxl)
 library(here)
+library(broom)
+library(patchwork)
 ```
 
 ```{r}
@@ -18,37 +20,103 @@ cali <- read_xlsx(here("files", "instrument_calibrations.xlsx"))
 ```
 
 ```{r}
-#Let's look at the different calibrations together
-cali %>% 
-  ggplot(aes(`chl standard concentration`, `Rb (Blank Subtracted)`, color = as.character(Date))) +
-  geom_point() +
-  geom_smooth(model = "lm", fullrange = TRUE) +
-  facet_wrap(~ `Fluorometer #`)
+#Trying to calculate information here to see if it lines up with what I did in Excel
+
+#Subtracting the blank before acid  value from the raw before acid value. Renaming using convention rb as "raw before acid" and ra as "raw after acid"
+cali_manip <- cali %>% 
+  mutate(rb_blank_corr = `Raw Before Acid` - `Blank Before Acid`)
+         
+#Since a blank after acid value was only available for later calibrations, I subtract the blank before acid values when not available and blank after acid value when it is available         
+cali_manip <- cali_manip %>% 
+  mutate(`Blank After Acid` = coalesce(`Blank After Acid`, 0)) %>% 
+  mutate(ra_blank_corr = case_when(`Blank After Acid` == 0  ~ `Raw After Acid` - `Blank Before Acid`,
+                          `Blank After Acid` > 0  ~ `Raw After Acid` - `Blank After Acid`))
+
+#Calculating the acid ratio (FM) and making sure it is the same as those calculated in excel.                      
+cali_manip <- cali_manip %>%
+  mutate(fm_blank_corr = rb_blank_corr/ra_blank_corr,
+         fm_comp = fm_blank_corr - `FM (Blank Subtracted)`)
+
+#Flagging fm that fall outside of the expected range, these should not be used for deriving calibration values. The low values generally occur as a result of standard concentrations that were too low. It also seems like slight acid contaimination may have been an issue for the Hakai calibrations. It is unclear why very high fm values occured.
+cali_manip <- cali_manip %>% 
+  mutate(fm_flag = case_when(fm_blank_corr < 1.60 | fm_blank_corr > 1.90 ~ "SVC",
+                             fm_blank_corr > 1.60 & fm_blank_corr <1.90 ~ "AV"))
+
+#Calculating ratio between chlorophyll standard concentration and rb_blank_corr
+cali_manip <-  cali_manip %>% 
+  mutate(raw_chl_rat = ra_blank_corr/`chl standard concentration`)
+
+#Removing columns I don't need
+cali_manip <- cali_manip %>% 
+  select(date = Date, flu_num = `Fluorometer #`, 
+         chl_std_conc = `chl standard concentration`, bb = `Blank Before Acid`,
+         ba = `Blank After Acid`, rb = `Raw Before Acid`, ra = `Raw After Acid`,
+         rb_blank_corr:fm_blank_corr, fm_flag, raw_chl_rat, 
+         excel_chl = `Calc. Chl`, excel_phaeo = `Calc. Phaeo`)
+
+#Determining 
+
 ```
+
+
 ```{r}
-#Let's look at the different calibrations together
-cali %>%
-  filter(`Fluorometer #` == "720000982") %>% 
-  ggplot(aes(`chl standard concentration`, `Calc. Chl`, color = as.character(Date))) +
-  geom_point() +
-  geom_smooth(model = "lm", fullrange = TRUE) +
-  facet_wrap(~ `Fluorometer #`)
+#Testing linear model statistics
+fitted_models <- cali_manip %>% 
+  group_by(Date, `flu_num`) %>% 
+  do(tidy(lm(`chl standard concentration` ~ 0 + `Raw Before Acid`, data = .))) %>% 
+  ungroup() 
 ```
+
+
+
+
+
 ```{r}
-#Let's look at the different calibrations together
-cali %>%
-  filter(`Fluorometer #` == "720000982") %>% 
-  ggplot(aes(`chl standard concentration`, `Raw Before Acid`, fill = as.character(Date))) + 
-  geom_point(size= 3 , shape = 21, color = "black") +
-  geom_smooth(model = "lm_right", fullrange = TRUE, se = FALSE) +
-  scale_x_continuous(expand=c(0,0), limits=c(0,320)) +
-  scale_y_continuous(expand=c(0,0), limits=c(-50,500000)) +
-  coord_cartesian(xlim=c(0,320), ylim=c(0,500000)) +
-  scale_color_brewer(palette = "Dark2") +
-  scale_fill_brewer(palette = "Dark2") +
-  theme_bw() 
-  # facet_wrap(~ as.character(Date), nrow = 2)
+p1 <- cali %>% 
+  filter(`Fluorometer #` == "720000982" & !as.character(Date) == "2018-04-17") %>% 
+  ggplot(aes(`Raw Before Acid`, `chl standard concentration`)) +
+  geom_point(aes(fill = factor(Date)), size = 3, pch = 21, color = "black", 
+             stroke = 1) +
+  stat_smooth(aes(color = factor(Date)), method = "lm", formula = y ~ x - 1,
+              se = FALSE, fullrange = T) +
+  scale_x_continuous(expand = c(0, 0), limits=c(0,550000)) +
+  scale_y_continuous(expand = c(0, 0), limits=c(-50,320)) +
+  coord_cartesian(xlim=c(0,550000), ylim=c(0,320)) +
+  scale_fill_brewer(palette = "Dark2", name = "Cali. Date") +
+  scale_color_brewer(palette = "Dark2", name = "Cali. Date") +
+  labs(x = "Instrument Raw #",
+       y = "Chl. Stand. Conc. (ug/L)",
+       title = "Instrument # 0982") +
+  theme_bw() +
+  theme(legend.position = c(0.83, 0.16),
+        text = element_text(size = 20)) 
+
+p2 <- cali %>% 
+  filter(`Fluorometer #` == "720001154" & !as.character(Date) == "2018-04-17") %>% 
+  ggplot(aes(`Raw Before Acid`, `chl standard concentration`)) +
+  geom_point(aes(fill = factor(Date)), size = 3, pch = 21, color = "black",
+             stroke = 1) +
+  stat_smooth(aes(color = factor(Date)), method = "lm", formula = y ~ x - 1,
+              se = FALSE, fullrange = T) +
+  scale_x_continuous(expand = c(0, 0), limits=c(0,550000)) +
+  scale_y_continuous(expand = c(0, 0), limits=c(-50,320)) +
+  coord_cartesian(xlim=c(0,550000), ylim=c(0,320)) +
+  scale_fill_brewer(palette = "Dark2", name = "Cali. Date") +
+  scale_color_brewer(palette = "Dark2", name = "Cali. Date") +
+  labs(x = "Instrument Raw #",
+       y = "Chl. Stand. Conc. (ug/L)",
+       title = "Instrument # 1154") +
+  theme_bw() +
+  theme(legend.position = c(0.83, 0.19),
+        axis.title.y = element_blank(),
+        # axis.text.y = element_blank(),
+        text = element_text(size = 20))
+
+fig <- p1+p2
+
+ggsave(here("figures", "Calibration_compare.png"),fig, width=14, height=7.5, dpi=300)
 ```
+
 
 
 
