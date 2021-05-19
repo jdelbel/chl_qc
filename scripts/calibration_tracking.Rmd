@@ -17,6 +17,9 @@ library(patchwork)
 ```{r}
 #Upload calibration sheet
 cali <- read_xlsx(here("files", "instrument_calibrations.xlsx"))
+
+#Upload Chlorophyll data for comparison between
+chl <- read_xlsx(here("files", "hakai_chl_all.xlsx"), sheet = "Hakai Data")
 ```
 
 ```{r}
@@ -58,22 +61,6 @@ cali_manip <- cali_manip %>%
 ```
 
 ```{r}
-
-cali_manip %>% 
-  filter(fm_flag == "AV") %>% 
-  ggplot(aes(factor(date), fm_blank_corr, fill = lab)) +
-  geom_boxplot() +
-  facet_wrap(~ factor(flu_num))
-
-cali_manip %>% 
-  filter(fm_flag == "AV") %>% 
-  ggplot(aes(factor(date), slope_ratio*10000, fill = lab)) +
-  geom_boxplot() +
-  facet_wrap(~ factor(flu_num))
-
-```
-
-```{r}
 p1 <- cali_manip %>% 
   filter(fm_flag == "AV" & flu_num == 720001154 & !as.character(date) == "2018-04-17") %>% 
   ggplot(aes(factor(date), slope_ratio*10000, fill = lab)) +
@@ -81,13 +68,14 @@ p1 <- cali_manip %>%
   theme_bw() +
   ylim(3, 8) +
   labs(title = "Instrument #1154",
-       y = "Chl. Standard (ug/L)/Raw Count * 10000",
+       y = "Chl. Std. (ug/L)/Raw Count * 10000",
        x = "Cali. Date") +
   scale_fill_brewer(palette = "Set1") +
   theme(legend.position = "none",
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
-        text = element_text(size = 20)) 
+        text = element_text(size = 28),
+        axis.text = element_text(colour = "black")) 
 
 p2 <- cali_manip %>% 
   filter(fm_flag == "AV" & flu_num == 720000982 & !as.character(date) == "2018-04-17") %>% 
@@ -98,12 +86,13 @@ p2 <- cali_manip %>%
   labs(title = "Instrument #0982",
        x = "Cali. Date") +
   scale_fill_brewer(palette = "Set1", name = "Cali. Lab") +
-  theme(legend.position = "none",
+  theme(legend.position = c(0.83, 0.16),
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
-        text = element_text(size = 20)) 
+        text = element_text(size = 28),
+        axis.text = element_text(colour = "black")) 
 
 p3 <- cali_manip %>% 
   filter(fm_flag == "AV" & flu_num == 720001154 & !as.character(date) == "2018-04-17") %>%
@@ -115,7 +104,9 @@ p3 <- cali_manip %>%
        x = "Cali. Date") +
   scale_fill_brewer(palette = "Set1") +
   theme(legend.position = "none",
-        text = element_text(size = 20)) 
+        text = element_text(size = 28),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(colour = "black"))
   
 
 p4 <- cali_manip %>% 
@@ -131,41 +122,27 @@ p4 <- cali_manip %>%
   theme(legend.position = "none",
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
-        text = element_text(size = 20)) 
+        text = element_text(size = 28),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(colour = "black"))
   
 fig <- p1 + p2 + p3 + p4
 
 ggsave(here("figures", "slope_fm_compare.png"), fig , width=16, height=15, dpi=300)
 ```
 
-
-
-
-
-
 ```{r}
-#Testing linear model statistics
-fitted_models <- cali_manip %>% 
-  group_by(Date, `flu_num`) %>% 
-  do(tidy(lm(`chl standard concentration` ~ 0 + `Raw Before Acid`, data = .))) %>% 
-  ungroup() 
-```
-
-
-
-
-
-```{r}
-p1 <- cali %>% 
-  filter(`Fluorometer #` == "720000982" & !as.character(Date) == "2018-04-17") %>% 
-  ggplot(aes(`Raw Before Acid`, `chl standard concentration`)) +
-  geom_point(aes(fill = factor(Date)), size = 3, pch = 21, color = "black", 
+p1 <- cali_manip %>% 
+  filter(flu_num == "720000982" & fm_flag == "AV" & 
+           !as.character(date) == "2018-04-17") %>% 
+  ggplot(aes(rb_blank_corr, chl_std_conc)) +
+  geom_point(aes(fill = factor(date), shape = lab), size = 3, pch = 21, color = "black", 
              stroke = 1) +
-  stat_smooth(aes(color = factor(Date)), method = "lm", formula = y ~ x - 1,
+  stat_smooth(aes(color = factor(date)), method = "lm", formula = y ~ x - 1,
               se = FALSE, fullrange = T) +
-  scale_x_continuous(expand = c(0, 0), limits=c(0,550000)) +
-  scale_y_continuous(expand = c(0, 0), limits=c(-50,320)) +
-  coord_cartesian(xlim=c(0,550000), ylim=c(0,320)) +
+  scale_x_continuous(expand = c(0, 0), limits=c(0, 550000)) +
+  scale_y_continuous(expand = c(0, 0), limits=c(-50, 320)) +
+  coord_cartesian(xlim=c(0, 550000), ylim=c(0, 320)) +
   scale_fill_brewer(palette = "Dark2", name = "Cali. Date") +
   scale_color_brewer(palette = "Dark2", name = "Cali. Date") +
   labs(x = "Instrument Raw #",
@@ -175,16 +152,17 @@ p1 <- cali %>%
   theme(legend.position = c(0.83, 0.16),
         text = element_text(size = 20)) 
 
-p2 <- cali %>% 
-  filter(`Fluorometer #` == "720001154" & !as.character(Date) == "2018-04-17") %>% 
-  ggplot(aes(`Raw Before Acid`, `chl standard concentration`)) +
-  geom_point(aes(fill = factor(Date)), size = 3, pch = 21, color = "black",
+p2 <- cali_manip %>% 
+  filter(flu_num == "720001154" & fm_flag == "AV" & 
+           !as.character(date) == "2018-04-17") %>% 
+  ggplot(aes(rb_blank_corr, chl_std_conc)) +
+  geom_point(aes(fill = factor(date)), size = 3, pch = 21, color = "black",
              stroke = 1) +
-  stat_smooth(aes(color = factor(Date)), method = "lm", formula = y ~ x - 1,
+  stat_smooth(aes(color = factor(date)), method = "lm", formula = y ~ x - 1,
               se = FALSE, fullrange = T) +
-  scale_x_continuous(expand = c(0, 0), limits=c(0,550000)) +
-  scale_y_continuous(expand = c(0, 0), limits=c(-50,320)) +
-  coord_cartesian(xlim=c(0,550000), ylim=c(0,320)) +
+  scale_x_continuous(expand = c(0, 0), limits=c(0, 550000)) +
+  scale_y_continuous(expand = c(0, 0), limits=c(-50, 320)) +
+  coord_cartesian(xlim=c(0, 550000), ylim=c(0, 320)) +
   scale_fill_brewer(palette = "Dark2", name = "Cali. Date") +
   scale_color_brewer(palette = "Dark2", name = "Cali. Date") +
   labs(x = "Instrument Raw #",
@@ -196,10 +174,43 @@ p2 <- cali %>%
         # axis.text.y = element_blank(),
         text = element_text(size = 20))
 
-fig <- p1+p2
+fig <- p1 + p2
 
-ggsave(here("figures", "Calibration_compare.png"),fig, width=14, height=7.5, dpi=300)
+ggsave(here("figures", "Calibration_compare_2.png"), 
+       fig, width = 14, height = 7.5, dpi = 300)
 ```
+
+```{r}
+#Determining linear model statistics - intercept set to 0
+fitted_models <- cali_manip %>% 
+  filter(fm_flag == "AV") %>% 
+  group_by(date, flu_num) %>% 
+  do(tidy(lm(chl_std_conc ~ 0 + rb_blank_corr, data = .))) %>% 
+  ungroup() %>% 
+  arrange(flu_num, date)
+
+#Determining mean fm value for each calibration
+cali_fm <- cali_manip %>% 
+  filter(fm_flag == "AV") %>% 
+  group_by(date, flu_num) %>% 
+  mutate(mean_fm = mean(fm_blank_corr),
+         mean_slope_ratio = mean(slope_ratio))
+
+#Merging calibration slope from linear model with fm value
+cali_values <- fitted_models %>% 
+  left_join(cali_fm) %>% 
+  distinct(date, flu_num, .keep_all = TRUE) %>% 
+  select(date:p.value, mean_fm, mean_slope_ratio)
+
+#For Instrument 1154, applying the back-calibrating from the first DFO 
+
+```
+
+
+
+
+
+
 
 
 
