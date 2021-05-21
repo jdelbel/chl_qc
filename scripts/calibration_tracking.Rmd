@@ -62,77 +62,6 @@ cali_manip <- cali_manip %>%
 
 ```{r}
 p1 <- cali_manip %>% 
-  filter(fm_flag == "AV" & flu_num == 720001154 & !as.character(date) == "2018-04-17") %>% 
-  ggplot(aes(factor(date), slope_ratio*10000, fill = lab)) +
-  geom_boxplot() +
-  theme_bw() +
-  ylim(3, 8) +
-  labs(title = "Instrument #1154",
-       y = "Chl. Std. (ug/L)/Raw Count * 10000",
-       x = "Cali. Date") +
-  scale_fill_brewer(palette = "Set1") +
-  theme(legend.position = "none",
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 28),
-        axis.text = element_text(colour = "black")) 
-
-p2 <- cali_manip %>% 
-  filter(fm_flag == "AV" & flu_num == 720000982 & !as.character(date) == "2018-04-17") %>% 
-  ggplot(aes(factor(date), slope_ratio*10000, fill = lab)) +
-  geom_boxplot() +
-  theme_bw() +
-  ylim(3, 8) +
-  labs(title = "Instrument #0982",
-       x = "Cali. Date") +
-  scale_fill_brewer(palette = "Set1", name = "Cali. Lab") +
-  theme(legend.position = c(0.83, 0.16),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 28),
-        axis.text = element_text(colour = "black")) 
-
-p3 <- cali_manip %>% 
-  filter(fm_flag == "AV" & flu_num == 720001154 & !as.character(date) == "2018-04-17") %>%
-  ggplot(aes(factor(date), fm_blank_corr, fill = lab)) +
-  geom_boxplot() +
-  theme_bw() +
-  ylim(1.6, 1.9) +
-  labs(y = "Acid Ratio (fm)",
-       x = "Cali. Date") +
-  scale_fill_brewer(palette = "Set1") +
-  theme(legend.position = "none",
-        text = element_text(size = 28),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.text = element_text(colour = "black"))
-  
-
-p4 <- cali_manip %>% 
-  filter(fm_flag == "AV" & flu_num == 720000982 & !as.character(date) == "2018-04-17") %>% 
-  ggplot(aes(factor(date), fm_blank_corr, fill = lab)) +
-  geom_boxplot() +
-  theme_bw() +
-  ylim(1.6, 1.9) +
-  ylim(1.6, 1.9) +
-  labs(y = "Acid Ratio (fm)",
-       x = "Cali. Date") +
-  scale_fill_brewer(palette = "Set1") +
-  theme(legend.position = "none",
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        text = element_text(size = 28),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.text = element_text(colour = "black"))
-  
-fig <- p1 + p2 + p3 + p4
-
-ggsave(here("figures", "slope_fm_compare.png"), fig , width=16, height=15, dpi=300)
-```
-
-```{r}
-p1 <- cali_manip %>% 
   filter(flu_num == "720000982" & fm_flag == "AV" & 
            !as.character(date) == "2018-04-17") %>% 
   ggplot(aes(rb_blank_corr, chl_std_conc)) +
@@ -189,6 +118,27 @@ fitted_models <- cali_manip %>%
   ungroup() %>% 
   arrange(flu_num, date)
 
+#Determining linear model statistics - intercept set to 0
+fitted_models_r2 <- cali_manip %>% 
+  filter(fm_flag == "AV") %>% 
+  group_by(date, flu_num) %>% 
+  do(glance(lm(chl_std_conc ~ 0 + rb_blank_corr, data = .))) %>% 
+  ungroup() %>% 
+  arrange(flu_num, date) %>% 
+  select(date, flu_num, r2 = r.squared) %>% 
+  mutate_at(vars(r2), funs(round(., 5)))
+  
+fitted_models <- fitted_models %>% 
+  left_join(fitted_models_r2)
+
+#Reassigning lab to fitted model outputs
+lab <- cali_manip %>% 
+  select(date, flu_num, lab) %>% 
+  distinct() 
+
+fitted_models <- fitted_models %>% 
+  left_join(lab)
+
 #Determining mean fm value for each calibration
 cali_fm <- cali_manip %>% 
   filter(fm_flag == "AV") %>% 
@@ -200,11 +150,184 @@ cali_fm <- cali_manip %>%
 cali_values <- fitted_models %>% 
   left_join(cali_fm) %>% 
   distinct(date, flu_num, .keep_all = TRUE) %>% 
-  select(date:p.value, mean_fm, mean_slope_ratio)
+  select(date:p.value, r2, mean_fm, mean_slope_ratio, lab)
+
+#isolating calibration values currently utilized on the portal - NAs are showing up. This is a problem
+cali_portal <- chl %>% 
+  select(flurometer_serial_no:calibration_slope) %>% 
+  distinct(.keep_all = TRUE) %>% 
+  filter(!is.na(calibration)) %>% 
+  rename(flu_num = flurometer_serial_no, date = calibration) %>% 
+  mutate(flu_num = as.numeric(flu_num))
+
+#merging with R determined slopes and fm values
+cali_values <- cali_values %>% 
+  left_join(cali_portal)
 
 #For Instrument 1154, applying the back-calibrating from the first DFO 
+chl_corrected_1154 <- chl %>% 
+  filter(filter_type == "Bulk GF/F" & flurometer_serial_no == "720001154" &
+           !is.na(calibration) & !is.na(before_acid) & !is.na(after_acid)) %>% 
+  select(date, volume, acetone_volume_ml, flurometer_serial_no:after_acid, chla) %>% 
+  mutate(chl_dfo = 0.0005424382*
+                (1.683012/(1.683012 - 1))*
+                (before_acid - after_acid)*
+                (acetone_volume_ml/volume),
+         rel_diff = ((chl_dfo - chla)/chla) * 100) %>% 
+  mutate_at(vars(rel_diff), funs(round(., 2)))
+
+chl_corrected_0982 <- chl %>% 
+  filter(filter_type == "Bulk GF/F" & flurometer_serial_no == "720000982" &
+           !is.na(calibration) & !is.na(before_acid) & !is.na(after_acid)) %>% 
+  select(date, volume, acetone_volume_ml, flurometer_serial_no:after_acid, chla) %>% 
+  mutate(chl_dfo = 0.0006425000*
+                (1.831313/(1.831313 - 1))*
+                (before_acid - after_acid)*
+                (acetone_volume_ml/volume),
+         rel_diff = ((chl_dfo - chla)/chla) * 100) %>% 
+  mutate_at(vars(rel_diff), funs(round(., 2)))
 
 ```
+
+```{r}
+p1 <- cali_values %>% 
+  filter(flu_num == 720001154 & 
+           !as.character(date) == "2018-04-17") %>% 
+  mutate(slope = estimate*10000,
+         se = std.error*10000) %>% 
+  ggplot(aes(factor(date), slope, fill = lab)) +
+  geom_point(size = 6, pch = 21, color = "black") +
+  geom_text(aes(label = r2), vjust = - 0.8, size = 7) +
+  geom_errorbar(aes(ymin = slope - se, ymax = slope + se), width = .3, size = 1) +
+  theme_bw() +
+  ylim(4, 7) +
+  labs(title = "Instrument #1154",
+       y = "Calibration Slope",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 28),
+        axis.text = element_text(colour = "black")) 
+
+p2 <- cali_values %>% 
+  filter(flu_num == 720000982 & 
+           !as.character(date) == "2018-04-17") %>% 
+  mutate(slope = estimate*10000,
+         se = std.error*10000) %>% 
+  ggplot(aes(factor(date), slope, fill = lab)) +
+  geom_point(size = 6, pch = 21, color = "black") +
+  geom_text(aes(label = r2), vjust = - 0.8, size = 7) +
+  geom_errorbar(aes(ymin = slope - se, ymax = slope + se), width = .3, size = 1) +
+  theme_bw() +
+  ylim(4, 7) +
+  labs(title = "Instrument #0982",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1", name = "Cali. Lab") +
+  theme(legend.position = c(0.83, 0.16),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 28),
+        axis.text = element_text(colour = "black")) 
+
+p3 <- cali_manip %>% 
+  filter(fm_flag == "AV" & flu_num == 720001154 & !as.character(date) == "2018-04-17") %>%
+  ggplot(aes(factor(date), fm_blank_corr, fill = lab)) +
+  geom_boxplot() +
+  theme_bw() +
+  ylim(1.6, 1.9) +
+  labs(y = "Acid Ratio (fm)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        text = element_text(size = 28),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(colour = "black"))
+  
+
+p4 <- cali_manip %>% 
+  filter(fm_flag == "AV" & flu_num == 720000982 & !as.character(date) == "2018-04-17") %>% 
+  ggplot(aes(factor(date), fm_blank_corr, fill = lab)) +
+  geom_boxplot() +
+  theme_bw() +
+  ylim(1.6, 1.9) +
+  ylim(1.6, 1.9) +
+  labs(y = "Acid Ratio (fm)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        text = element_text(size = 28),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(colour = "black"))
+  
+fig <- p1 + p2 + p3 + p4
+
+ggsave(here("figures", "slope_fm_compare.png"), fig , width=16, height=15, dpi=300)
+```
+
+
+```{r}
+#Plot relative difference
+p1 <- chl_corrected_1154 %>%
+  filter(!as.character(calibration) == "2019-05-09") %>% 
+  distinct(calibration, .keep_all = TRUE) %>%  
+  mutate(pos = rel_diff > 0) %>% 
+  ggplot(aes(x = factor(calibration), y = rel_diff, fill = pos)) +
+  geom_col(position = "identity", colour = "black") +
+  geom_hline(yintercept = 0) +
+  geom_text(aes(label = rel_diff), vjust = - 0.5, size = 7) +
+  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
+  lims(y = c(-40, 40)) +
+  theme_bw() +
+  labs(x = "Calibration Date",
+       y = "% Diff. Hakai vs DFO Cali. Chl",
+       title = "Instrument #1154") +
+  theme(text = element_text(size = 28),
+        axis.text = element_text(colour = "black"))
+  
+p2 <- chl_corrected_0982 %>%
+  filter(!as.character(calibration) == "2019-05-09" &
+           !as.character(calibration) == "2018-05-04") %>% 
+  distinct(calibration, .keep_all = TRUE) %>%  
+  mutate(pos = rel_diff > 0) %>% 
+  ggplot(aes(x = factor(calibration), y = rel_diff, fill = pos)) +
+  geom_col(position = "identity", colour = "black", width = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_text(aes(label = rel_diff), vjust = - 0.5, size = 7) +
+  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
+  lims(y = c(-40, 40)) +
+  theme_bw() +
+  labs(x = "Calibration Date",
+       y = "% Diff. Hakai vs DFO Cali. Chl",
+       title = "Instrument #0982") +
+  theme(text = element_text(size = 28),
+        axis.text = element_text(colour = "black"))
+
+fig <- p1/p2
+
+
+ggsave(here("figures", "Cali_red_diff.png"), fig, width=16, height=12, dpi=300)
+```
+```{r}
+test <- chl_corrected_1154 %>% 
+  filter(as.character(calibration) == "2017-01-08") %>% 
+  mutate(test = calibration_slope*
+                (acid_coefficient/(acid_coefficient - 1))*
+                (before_acid - after_acid)*
+                (acetone_volume_ml/volume),
+         test2 = (acid_coefficient/(acid_coefficient - 1)),
+         test3 = 0.0005424382*
+                (1.683012/(1.683012 - 1))*
+                (before_acid - after_acid)*
+                (acetone_volume_ml/volume))
+```
+
+
 
 
 
