@@ -41,11 +41,21 @@ pivot_chl <- chl %>%
          um3_chla_1 = `3um_1`,
          GFF_chla_1 = `GF/F_1`) %>% 
   mutate(sf_sum = um20_chla_1 + um3_chla_1 + GFF_chla_1)
+```
 
+
+```{r}
 pivot_chl %>% 
-  ggplot(mapping = aes())
+  ggplot(mapping = aes(bulk_chla_1, sf_sum)) +
+  geom_point()
+  
 
 
+
+```
+
+
+```{r}
 #Pivoting wider the acid ratio data to join with the chlorophyll data.
 pivot_acid <- chl %>% 
   select(collected, site_id, line_out_depth, rep, filter_type, acid_ratio) %>% 

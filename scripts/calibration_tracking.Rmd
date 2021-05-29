@@ -20,6 +20,11 @@ cali <- read_xlsx(here("files", "instrument_calibrations.xlsx"))
 
 #Upload Chlorophyll data for comparison between
 chl <- read_xlsx(here("files", "hakai_chl_all.xlsx"), sheet = "Hakai Data")
+
+ss <- read_xlsx(here("files", "solid_standards.xlsx"), sheet = "Hakai Data")
+
+blanks <- read_xlsx(here("files", "blanks.xlsx"), sheet = "Hakai Data")
+
 ```
 
 ```{r}
@@ -169,12 +174,40 @@ chl_corrected_1154 <- chl %>%
   filter(filter_type == "Bulk GF/F" & flurometer_serial_no == "720001154" &
            !is.na(calibration) & !is.na(before_acid) & !is.na(after_acid)) %>% 
   select(date, volume, acetone_volume_ml, flurometer_serial_no:after_acid, chla) %>% 
-  mutate(chl_dfo = 0.0005424382*
-                (1.683012/(1.683012 - 1))*
+  mutate(chl_dfo = 0.0005026532*
+                (1.717642/(1.717642 - 1))*
                 (before_acid - after_acid)*
                 (acetone_volume_ml/volume),
          rel_diff = ((chl_dfo - chla)/chla) * 100) %>% 
   mutate_at(vars(rel_diff), funs(round(., 2)))
+
+#Accounting for drift in backcorrected DFO slope.
+
+chl_corrected_1154 <- chl_corrected_1154 %>% 
+  distinct(calibration, .keep_all = TRUE) %>% 
+  filter(!as.character(calibration) == "2014-11-21" &
+         !as.character(calibration) == "2019-05-09") %>%
+  mutate(slope_dfo = 0.0005026532,
+         fm_dfo = 1.717642) %>% 
+  arrange(desc(calibration)) %>%
+  mutate(perc_slope = seq(0.015, 0.075, by = 0.015),
+         slope_dfo_corr = slope_dfo - (slope_dfo*perc_slope),
+         chl_dfo_new = slope_dfo_corr*
+           (1.717642/(1.717642 - 1))*
+           (before_acid - after_acid)*
+           (acetone_volume_ml/volume),
+         rel_diff_corr = ((chl_dfo_new - chla)/chla) * 100) %>% 
+  mutate_at(vars(rel_diff_corr), funs(round(., 2))) %>% 
+  arrange(calibration)
+
+chl_corr1154_plot <- chl_corrected_1154 %>% 
+  select(flurometer_serial_no:calibration_slope, slope_dfo:slope_dfo_corr, 
+         rel_diff_corr) %>% 
+  add_row(flurometer_serial_no = "720001154", 
+          calibration = as.Date("2018-05-04", tz = "UTC"),
+          acid_coefficient = NA, calibration_slope = 0.0005026532,
+          slope_dfo = 0.0005026532, fm_dfo = 1.717642, perc_slope = 0, 
+          slope_dfo_corr = 0.0005026532, rel_diff_corr = 0)
 
 chl_corrected_0982 <- chl %>% 
   filter(filter_type == "Bulk GF/F" & flurometer_serial_no == "720000982" &
@@ -202,7 +235,8 @@ p1 <- cali_values %>%
   theme_bw() +
   ylim(4, 7) +
   labs(title = "Instrument #1154",
-       y = "Calibration Slope",
+       y = bquote("Calibration Slope (# =" ~ r^2*")"),
+         "Calibration Slope (# = R2)",
        x = "Cali. Date") +
   scale_fill_brewer(palette = "Set1") +
   theme(legend.position = "none",
@@ -273,16 +307,14 @@ ggsave(here("figures", "slope_fm_compare.png"), fig , width=16, height=15, dpi=3
 
 ```{r}
 #Plot relative difference
-p1 <- chl_corrected_1154 %>%
-  filter(!as.character(calibration) == "2019-05-09") %>% 
-  distinct(calibration, .keep_all = TRUE) %>%  
-  mutate(pos = rel_diff > 0) %>% 
-  ggplot(aes(x = factor(calibration), y = rel_diff, fill = pos)) +
-  geom_col(position = "identity", colour = "black") +
+p1 <- chl_corr1154_plot %>%
+  mutate(pos = rel_diff_corr > 0) %>% 
+  ggplot(aes(x = factor(calibration), y = rel_diff_corr, fill = pos)) +
+  geom_col(position = "identity", colour = "black", width = 0.75) +
   geom_hline(yintercept = 0) +
-  geom_text(aes(label = rel_diff), vjust = - 0.5, size = 7) +
+  geom_text(aes(label = rel_diff_corr), vjust = - 0.5, size = 7) +
   scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
-  lims(y = c(-40, 40)) +
+  lims(y = c(-22, 22)) +
   theme_bw() +
   labs(x = "Calibration Date",
        y = "% Diff. Hakai vs DFO Cali. Chl",
@@ -300,7 +332,7 @@ p2 <- chl_corrected_0982 %>%
   geom_hline(yintercept = 0) +
   geom_text(aes(label = rel_diff), vjust = - 0.5, size = 7) +
   scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
-  lims(y = c(-40, 40)) +
+  lims(y = c(-22, 22)) +
   theme_bw() +
   labs(x = "Calibration Date",
        y = "% Diff. Hakai vs DFO Cali. Chl",
@@ -311,22 +343,132 @@ p2 <- chl_corrected_0982 %>%
 fig <- p1/p2
 
 
-ggsave(here("figures", "Cali_red_diff.png"), fig, width=16, height=12, dpi=300)
+ggsave(here("figures", "Cali_red_diff_scorr.png"), fig, width=16, height=12, dpi=300)
 ```
 ```{r}
-test <- chl_corrected_1154 %>% 
-  filter(as.character(calibration) == "2017-01-08") %>% 
-  mutate(test = calibration_slope*
-                (acid_coefficient/(acid_coefficient - 1))*
-                (before_acid - after_acid)*
-                (acetone_volume_ml/volume),
-         test2 = (acid_coefficient/(acid_coefficient - 1)),
-         test3 = 0.0005424382*
-                (1.683012/(1.683012 - 1))*
-                (before_acid - after_acid)*
-                (acetone_volume_ml/volume))
+#This is not my official figure showing the difference in Chlorophyll when back calibrating with the 2018 DFO calibration (instrument 1154)
+
+p1 <- chl_corr1154_plot %>% 
+  select(calibration, calibration_slope, slope_dfo_corr) %>% 
+  pivot_longer(c(calibration_slope, slope_dfo_corr),
+               names_to = "type", values_to = "slope") %>% 
+  ggplot(aes(x = factor(calibration), y = slope*10000, fill = type)) +
+  geom_point(size = 7, pch = 21, color = "black", stroke = 2) +
+  theme_bw() +
+  ylim(4, 6) +
+  labs(title = "Instrument #1154",
+       y = "Calibration Slope") +
+  scale_fill_brewer(palette = "Set1", name = element_blank(), 
+                    labels = c("Hakai", "DFO 2018 Drift Corrected (-1.5%)")) +
+  theme(legend.position = c(0.82, 0.16),
+        legend.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 28),
+        axis.text = element_text(colour = "black"))
+
+p2 <- chl_corr1154_plot %>% 
+  select(calibration, acid_coefficient, fm_dfo) %>% 
+  pivot_longer(c(acid_coefficient, fm_dfo),
+               names_to = "type", values_to = "fm") %>% 
+  ggplot(aes(x = factor(calibration), y = fm, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "Black", size = 1) +
+  theme_bw() +
+  coord_cartesian(ylim = c(1.6, 1.9)) +
+  labs(y = "Acid Ratio (fm)") +
+  scale_fill_brewer(palette = "Set1", name = element_blank(), 
+                    labels = c("Hakai", "DFO 2018")) +
+  theme(legend.position = c(0.85, 0.93),
+        legend.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 28),
+        axis.text = element_text(colour = "black"))
+
+p3 <- chl_corr1154_plot %>%
+  mutate(pos = rel_diff_corr > 0) %>% 
+  ggplot(aes(x = factor(calibration), y = rel_diff_corr, fill = pos)) +
+  geom_col(position = "identity", colour = "black", width = 0.75, size = 1) +
+  geom_hline(yintercept = 0) +
+  geom_text(aes(label = rel_diff_corr), vjust = - 0.5, size = 7) +
+  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
+  lims(y = c(-22, 22)) +
+  theme_bw() +
+  labs(x = "Calibration Date",
+       y = "% Diff. Chl") +
+  theme(text = element_text(size = 28),
+        axis.text = element_text(colour = "black"))
+
+fig <- p1/p2/p3
+
+ggsave(here("figures", "test.png"), fig,
+       width = 16, height = 13, dpi = 300)
 ```
 
+
+```{r}
+#Working with solid standards - I should make these a supplementary figure - add calibration values.
+ss %>% 
+  filter(flurometer_serial_no == 720001154) %>% 
+  mutate(low = before_acid < 15000) %>% 
+  ggplot(aes(x = factor(calibration), y = before_acid, fill = low)) +
+  geom_boxplot() 
+  
+ss %>% 
+  filter(flurometer_serial_no == 720000982) %>% 
+  # mutate(low = before_acid > 15000) %>% 
+  ggplot(aes(x = date, y = before_acid)) +
+  geom_point() +
+  ylim(0, 30000)
+
+ss %>% 
+  filter(flurometer_serial_no == 720000982 & date < "2019-09-10") %>% 
+  mutate(low = before_acid < 15000) %>% 
+  ggplot(aes(x = factor(calibration), y = before_acid, fill = low)) +
+  geom_boxplot() 
+
+
+
+```
+
+```{r}
+#Looking at blanks - I should make these a supplimentary figure - add calibration and after acid values.
+
+blanks %>% 
+  filter(flurometer_serial_no == 720000982 & before_acid < 5000) %>% 
+  ggplot(aes(x = date, y = before_acid)) +
+  geom_point()
+
+blanks %>% 
+  filter(flurometer_serial_no == 720000982 & before_acid < 5000) %>% 
+  ggplot(aes(x = factor(calibration), y = before_acid)) +
+  geom_boxplot()
+
+blanks %>% 
+  filter(flurometer_serial_no == 720001154 & before_acid < 5000 & 
+           date > "2015-01-01") %>% 
+  ggplot(aes(x = date, y = before_acid)) +
+  geom_point()
+
+blanks %>% 
+  filter(flurometer_serial_no == 720001154 & before_acid < 5000 & 
+           date > "2015-01-01") %>% 
+  ggplot(aes(x = factor(calibration), y = before_acid)) +
+  geom_boxplot()
+```
+
+
+
+
+
+```{r}
+#Trying to calculate percent change slope - Need to incorporate this to my official sheet.
+cali_values_test <- cali_values %>% 
+  filter(!as.character(date) == "2018-04-17") %>% 
+  group_by(flu_num) %>% 
+  mutate(Percentage_Change = (estimate - lag(estimate))/lag(estimate) * 100) %>%
+  ungroup()
+```
 
 
 
