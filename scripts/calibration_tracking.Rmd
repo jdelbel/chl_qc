@@ -63,6 +63,11 @@ cali_manip <- cali_manip %>%
 cali_manip <- cali_manip %>% 
   mutate(slope_ratio = chl_std_conc/rb_blank_corr)
 
+cali_svc <- cali_manip %>% 
+  group_by(date, flu_num, fm_flag) %>% 
+  summarise(number = n()) %>% 
+  arrange(flu_num, date)
+
 ```
 
 ```{r}
@@ -266,6 +271,8 @@ p1 <- cali_values %>%
   theme(legend.position = "none",
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
         text = element_text(size = 30),
         axis.text = element_text(colour = "black")) 
 
@@ -281,11 +288,11 @@ p2 <- cali_values %>%
   theme_bw() +
   ylim(4, 7) +
   labs(title = "Instrument #0982",
+       y = bquote("Calibration Slope (# =" ~ r^2*")"),
+         "Calibration Slope (# = R2)",
        x = "Cali. Date") +
   scale_fill_brewer(palette = "Set1", name = "Cali. Lab") +
   theme(legend.position = c(0.83, 0.16),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         text = element_text(size = 30),
@@ -303,6 +310,8 @@ p3 <- cali_manip %>%
   theme(legend.position = "none",
         text = element_text(size = 30),
         axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
         axis.text = element_text(colour = "black"))
   
 
@@ -317,8 +326,6 @@ p4 <- cali_manip %>%
        x = "Cali. Date") +
   scale_fill_brewer(palette = "Set1") +
   theme(legend.position = "none",
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
         text = element_text(size = 30),
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text = element_text(colour = "black"))
