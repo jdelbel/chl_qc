@@ -66,55 +66,6 @@ cali_manip <- cali_manip %>%
 ```
 
 ```{r}
-p1 <- cali_manip %>% 
-  filter(flu_num == "720000982" & fm_flag == "AV" & 
-           !as.character(date) == "2018-04-17") %>% 
-  ggplot(aes(rb_blank_corr, chl_std_conc)) +
-  geom_point(aes(fill = factor(date), shape = lab), size = 3, pch = 21, color = "black", 
-             stroke = 1) +
-  stat_smooth(aes(color = factor(date)), method = "lm", formula = y ~ x - 1,
-              se = FALSE, fullrange = T) +
-  scale_x_continuous(expand = c(0, 0), limits=c(0, 550000)) +
-  scale_y_continuous(expand = c(0, 0), limits=c(-50, 320)) +
-  coord_cartesian(xlim=c(0, 550000), ylim=c(0, 320)) +
-  scale_fill_brewer(palette = "Dark2", name = "Cali. Date") +
-  scale_color_brewer(palette = "Dark2", name = "Cali. Date") +
-  labs(x = "Instrument Raw #",
-       y = "Chl. Stand. Conc. (ug/L)",
-       title = "Instrument # 0982") +
-  theme_bw() +
-  theme(legend.position = c(0.83, 0.16),
-        text = element_text(size = 20)) 
-
-p2 <- cali_manip %>% 
-  filter(flu_num == "720001154" & fm_flag == "AV" & 
-           !as.character(date) == "2018-04-17") %>% 
-  ggplot(aes(rb_blank_corr, chl_std_conc)) +
-  geom_point(aes(fill = factor(date)), size = 3, pch = 21, color = "black",
-             stroke = 1) +
-  stat_smooth(aes(color = factor(date)), method = "lm", formula = y ~ x - 1,
-              se = FALSE, fullrange = T) +
-  scale_x_continuous(expand = c(0, 0), limits=c(0, 550000)) +
-  scale_y_continuous(expand = c(0, 0), limits=c(-50, 320)) +
-  coord_cartesian(xlim=c(0, 550000), ylim=c(0, 320)) +
-  scale_fill_brewer(palette = "Dark2", name = "Cali. Date") +
-  scale_color_brewer(palette = "Dark2", name = "Cali. Date") +
-  labs(x = "Instrument Raw #",
-       y = "Chl. Stand. Conc. (ug/L)",
-       title = "Instrument # 1154") +
-  theme_bw() +
-  theme(legend.position = c(0.83, 0.19),
-        axis.title.y = element_blank(),
-        # axis.text.y = element_blank(),
-        text = element_text(size = 20))
-
-fig <- p1 + p2
-
-ggsave(here("figures", "Calibration_compare_2.png"), 
-       fig, width = 14, height = 7.5, dpi = 300)
-```
-
-```{r}
 #Determining linear model statistics - intercept set to 0
 fitted_models <- cali_manip %>% 
   filter(fm_flag == "AV") %>% 
@@ -168,8 +119,11 @@ cali_portal <- chl %>%
 #merging with R determined slopes and fm values
 cali_values <- cali_values %>% 
   left_join(cali_portal)
+```
 
-#For Instrument 1154, applying the back-calibrating from the first DFO 
+
+```{r}
+#For Instrument 1154, applying the back-calibrating from the first DFO calibration (2018-05-04)
 chl_corrected_1154 <- chl %>% 
   filter(filter_type == "Bulk GF/F" & flurometer_serial_no == "720001154" &
            !is.na(calibration) & !is.na(before_acid) & !is.na(after_acid)) %>% 
@@ -208,18 +162,88 @@ chl_corr1154_plot <- chl_corrected_1154 %>%
           acid_coefficient = NA, calibration_slope = 0.0005026532,
           slope_dfo = 0.0005026532, fm_dfo = 1.717642, perc_slope = 0, 
           slope_dfo_corr = 0.0005026532, rel_diff_corr = 0)
+```
+
+
+```{r}
+#Back correcting 0982 concentrations using acid ratio from first DFO calibration (2018-05-04)
 
 chl_corrected_0982 <- chl %>% 
   filter(filter_type == "Bulk GF/F" & flurometer_serial_no == "720000982" &
            !is.na(calibration) & !is.na(before_acid) & !is.na(after_acid)) %>% 
   select(date, volume, acetone_volume_ml, flurometer_serial_no:after_acid, chla) %>% 
-  mutate(chl_dfo = 0.0006425000*
+  mutate(chl_dfo = calibration_slope*
                 (1.831313/(1.831313 - 1))*
                 (before_acid - after_acid)*
                 (acetone_volume_ml/volume),
          rel_diff = ((chl_dfo - chla)/chla) * 100) %>% 
   mutate_at(vars(rel_diff), funs(round(., 2)))
 
+chl_corrected_0982 <- chl_corrected_0982 %>% 
+  distinct(calibration, .keep_all = TRUE) %>% 
+  filter(!as.character(calibration) == "2019-05-09") %>%
+  select(flurometer_serial_no:calibration_slope, 
+         rel_diff) %>% 
+  mutate(fm_dfo = 1.831313) %>%
+  mutate(acid_coefficient = case_when(acid_coefficient > 1.8 ~ 0,
+                                             TRUE ~ as.numeric
+                                             (acid_coefficient)))
+
+#Need to figure out how to make the single value NA for plotting
+
+```
+
+```{r}
+p1 <- cali_manip %>% 
+  filter(flu_num == "720000982" & fm_flag == "AV" & 
+           !as.character(date) == "2018-04-17") %>% 
+  ggplot(aes(rb_blank_corr, chl_std_conc)) +
+  geom_point(aes(fill = factor(date), shape = lab), size = 3, pch = 21, 
+             color = "black", stroke = 1) +
+  stat_smooth(aes(color = factor(date)), method = "lm", formula = y ~ x - 1,
+              se = FALSE, fullrange = T) +
+  scale_x_continuous(expand = c(0, 0), limits=c(0, 650000)) +
+  scale_y_continuous(expand = c(0, 0), limits=c(-50, 320)) +
+  coord_cartesian(xlim=c(0, 650000), ylim=c(0, 320)) +
+  scale_fill_brewer(palette = "Dark2", name = "Cali. Date") +
+  scale_color_brewer(palette = "Dark2", name = "Cali. Date") +
+  labs(x = "RFU",
+       y = "Chl. Stand. Conc. (ug/L)",
+       title = "Instrument # 0982") +
+  theme_bw() +
+  theme(legend.position = c(0.83, 0.18),
+        text = element_text(size = 24),
+        axis.text = element_text(colour = "black")) 
+
+p2 <- cali_manip %>% 
+  filter(flu_num == "720001154" & fm_flag == "AV" & 
+           !as.character(date) == "2018-04-17") %>% 
+  ggplot(aes(rb_blank_corr, chl_std_conc)) +
+  geom_point(aes(fill = factor(date)), size = 3, pch = 21, color = "black",
+             stroke = 1) +
+  stat_smooth(aes(color = factor(date)), method = "lm", formula = y ~ x - 1,
+              se = FALSE, fullrange = T) +
+  scale_x_continuous(expand = c(0, 0), limits=c(0, 650000)) +
+  scale_y_continuous(expand = c(0, 0), limits=c(-50, 320)) +
+  coord_cartesian(xlim=c(0, 650000), ylim=c(0, 320)) +
+  scale_fill_brewer(palette = "Dark2", name = "Cali. Date") +
+  scale_color_brewer(palette = "Dark2", name = "Cali. Date") +
+  labs(x = "RFU",
+       y = "Chl. Stand. Conc. (ug/L)",
+       title = "Instrument # 1154") +
+  theme_bw() +
+  theme(legend.position = c(0.83, 0.21),
+        axis.title.y = element_blank(),
+        # axis.text.y = element_blank(),
+        text = element_text(size = 24),
+        axis.text = element_text(colour = "black"))
+
+fig <- p1 + p2 + 
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 26))
+
+ggsave(here("figures", "Calibration_compare_2.png"), 
+       fig, width = 14, height = 7.5, dpi = 300)
 ```
 
 ```{r}
@@ -242,7 +266,7 @@ p1 <- cali_values %>%
   theme(legend.position = "none",
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
-        text = element_text(size = 28),
+        text = element_text(size = 30),
         axis.text = element_text(colour = "black")) 
 
 p2 <- cali_values %>% 
@@ -264,7 +288,7 @@ p2 <- cali_values %>%
         axis.text.y = element_blank(),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
-        text = element_text(size = 28),
+        text = element_text(size = 30),
         axis.text = element_text(colour = "black")) 
 
 p3 <- cali_manip %>% 
@@ -277,7 +301,7 @@ p3 <- cali_manip %>%
        x = "Cali. Date") +
   scale_fill_brewer(palette = "Set1") +
   theme(legend.position = "none",
-        text = element_text(size = 28),
+        text = element_text(size = 30),
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text = element_text(colour = "black"))
   
@@ -295,58 +319,18 @@ p4 <- cali_manip %>%
   theme(legend.position = "none",
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
-        text = element_text(size = 28),
+        text = element_text(size = 30),
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text = element_text(colour = "black"))
   
-fig <- p1 + p2 + p3 + p4
+fig <- p2 + p1 + p4 + p3
 
-ggsave(here("figures", "slope_fm_compare.png"), fig , width=16, height=15, dpi=300)
+ggsave(here("figures", "slope_fm_compare.png"), 
+       fig, width = 16, height = 15, dpi=300)
 ```
 
-
 ```{r}
-#Plot relative difference
-p1 <- chl_corr1154_plot %>%
-  mutate(pos = rel_diff_corr > 0) %>% 
-  ggplot(aes(x = factor(calibration), y = rel_diff_corr, fill = pos)) +
-  geom_col(position = "identity", colour = "black", width = 0.75) +
-  geom_hline(yintercept = 0) +
-  geom_text(aes(label = rel_diff_corr), vjust = - 0.5, size = 7) +
-  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
-  lims(y = c(-22, 22)) +
-  theme_bw() +
-  labs(x = "Calibration Date",
-       y = "% Diff. Hakai vs DFO Cali. Chl",
-       title = "Instrument #1154") +
-  theme(text = element_text(size = 28),
-        axis.text = element_text(colour = "black"))
-  
-p2 <- chl_corrected_0982 %>%
-  filter(!as.character(calibration) == "2019-05-09" &
-           !as.character(calibration) == "2018-05-04") %>% 
-  distinct(calibration, .keep_all = TRUE) %>%  
-  mutate(pos = rel_diff > 0) %>% 
-  ggplot(aes(x = factor(calibration), y = rel_diff, fill = pos)) +
-  geom_col(position = "identity", colour = "black", width = 0.5) +
-  geom_hline(yintercept = 0) +
-  geom_text(aes(label = rel_diff), vjust = - 0.5, size = 7) +
-  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
-  lims(y = c(-22, 22)) +
-  theme_bw() +
-  labs(x = "Calibration Date",
-       y = "% Diff. Hakai vs DFO Cali. Chl",
-       title = "Instrument #0982") +
-  theme(text = element_text(size = 28),
-        axis.text = element_text(colour = "black"))
-
-fig <- p1/p2
-
-
-ggsave(here("figures", "Cali_red_diff_scorr.png"), fig, width=16, height=12, dpi=300)
-```
-```{r}
-#This is not my official figure showing the difference in Chlorophyll when back calibrating with the 2018 DFO calibration (instrument 1154)
+#This is now my official figure showing the difference in Chlorophyll when back calibrating with the 2018 DFO calibration (instrument 1154)
 
 p1 <- chl_corr1154_plot %>% 
   select(calibration, calibration_slope, slope_dfo_corr) %>% 
@@ -401,9 +385,196 @@ p3 <- chl_corr1154_plot %>%
 
 fig <- p1/p2/p3
 
-ggsave(here("figures", "test.png"), fig,
+ggsave(here("figures", "1154_backcali_perc_diff.png"), fig,
        width = 16, height = 13, dpi = 300)
 ```
+
+```{r}
+#Back calibrating 0982 with just the 2018 DFO fm values (slope seemed to be fine)
+
+p1 <- chl_corrected_0982 %>% 
+  select(calibration, calibration_slope) %>% 
+  pivot_longer(calibration_slope,
+               names_to = "type", values_to = "slope") %>% 
+  ggplot(aes(x = factor(calibration), y = slope*10000, fill = type)) +
+  geom_point(size = 7, pch = 21, color = "black", stroke = 2) +
+  theme_bw() +
+  ylim(4, 7) +
+  labs(title = "Instrument #1154",
+       y = "Calibration Slope") +
+  scale_fill_brewer(palette = "Set1", name = element_blank(), 
+                    labels = c("Hakai", "DFO 2018 Drift Corrected (-1.5%)")) +
+  theme(legend.position = c(0.82, 0.16),
+        legend.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 28),
+        axis.text = element_text(colour = "black"))
+
+p2 <- chl_corrected_0982 %>% 
+  select(calibration, acid_coefficient, fm_dfo) %>% 
+  pivot_longer(c(acid_coefficient, fm_dfo),
+               names_to = "type", values_to = "fm") %>% 
+  ggplot(aes(x = factor(calibration), y = fm, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "Black", size = 1) +
+  theme_bw() +
+  coord_cartesian(ylim = c(1.6, 1.9)) +
+  labs(y = "Acid Ratio (fm)") +
+  scale_fill_brewer(palette = "Set1", name = element_blank(), 
+                    labels = c("Hakai", "DFO 2018")) +
+  theme(legend.position = c(0.85, 0.93),
+        legend.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 28),
+        axis.text = element_text(colour = "black"))
+
+p3 <- chl_corrected_0982 %>%
+  mutate(pos = rel_diff > 0) %>% 
+  ggplot(aes(x = factor(calibration), y = rel_diff, fill = pos)) +
+  geom_col(position = "identity", colour = "black", width = 0.75, size = 1) +
+  geom_hline(yintercept = 0) +
+  geom_text(aes(label = rel_diff), vjust = - 0.5, size = 7) +
+  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
+  lims(y = c(-22, 22)) +
+  theme_bw() +
+  labs(x = "Calibration Date",
+       y = "% Diff. Chl") +
+  theme(text = element_text(size = 28),
+        axis.text = element_text(colour = "black"))
+
+fig <- p1/p2/p3
+
+ggsave(here("figures", "0982_backcali_perc_diff.png"), fig,
+       width = 16, height = 13, dpi = 300)
+
+```
+```{r}
+
+#Trying to put both together.
+
+
+
+p1 <- chl_corrected_0982 %>% 
+  select(calibration, calibration_slope) %>% 
+  pivot_longer(calibration_slope,
+               names_to = "type", values_to = "slope") %>% 
+  ggplot(aes(x = factor(calibration), y = slope*10000, fill = type)) +
+  geom_point(size = 7, pch = 21, color = "black", stroke = 2) +
+  theme_bw() +
+  ylim(4, 7) +
+  labs(title = "Instrument #0982",
+       y = "Calibration Slope") +
+  scale_fill_brewer(palette = "Set1", name = element_blank(), 
+                    labels = c("Hakai", "DFO 2018 Drift Corrected (-1.5%)")) +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+p2 <- chl_corrected_0982 %>% 
+  select(calibration, acid_coefficient, fm_dfo) %>% 
+  pivot_longer(c(acid_coefficient, fm_dfo),
+               names_to = "type", values_to = "fm") %>% 
+  ggplot(aes(x = factor(calibration), y = fm, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "Black", size = 1,
+           width = 0.6) +
+  theme_bw() +
+  coord_cartesian(ylim = c(1.6, 1.9)) +
+  labs(y = "Acid Ratio (fm)") +
+  scale_fill_brewer(palette = "Set1", name = element_blank(), 
+                    labels = c("Hakai", "DFO 2018")) +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+p3 <- chl_corrected_0982 %>%
+  mutate(pos = rel_diff > 0) %>% 
+  ggplot(aes(x = factor(calibration), y = rel_diff, fill = pos)) +
+  geom_col(position = "identity", colour = "black", width = 0.6, size = 1) +
+  geom_hline(yintercept = 0) +
+  geom_text(aes(label = rel_diff), vjust = - 0.5, size = 7) +
+  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
+  lims(y = c(-12, 12)) +
+  theme_bw() +
+  labs(x = "Calibration Date",
+       y = "% Diff. Chl") +
+  theme(text = element_text(size = 30),
+        axis.text = element_text(colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+p4 <- chl_corr1154_plot %>% 
+  select(calibration, calibration_slope, slope_dfo_corr) %>% 
+  pivot_longer(c(calibration_slope, slope_dfo_corr),
+               names_to = "type", values_to = "slope") %>% 
+  ggplot(aes(x = factor(calibration), y = slope*10000, fill = type)) +
+  geom_point(size = 7, pch = 21, color = "black", stroke = 2) +
+  theme_bw() +
+  ylim(4, 7) +
+  labs(title = "Instrument #1154",
+       y = "Calibration Slope") +
+  scale_fill_brewer(palette = "Set1", name = element_blank(), 
+                    labels = c("Hakai", "DFO 2018 Drift Corrected (-1.5%)")) +
+  theme(legend.position = c(0.6, 0.9),
+        legend.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+p5 <- chl_corr1154_plot %>% 
+  select(calibration, acid_coefficient, fm_dfo) %>% 
+  pivot_longer(c(acid_coefficient, fm_dfo),
+               names_to = "type", values_to = "fm") %>% 
+  ggplot(aes(x = factor(calibration), y = fm, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "Black", size = 1) +
+  theme_bw() +
+  coord_cartesian(ylim = c(1.6, 1.9)) +
+  labs(y = "Acid Ratio (fm)") +
+  scale_fill_brewer(palette = "Set1", name = element_blank(), 
+                    labels = c("Hakai", "DFO 2018")) +
+  theme(legend.position = c(0.85, 0.93),
+        legend.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+p6 <- chl_corr1154_plot %>%
+  mutate(pos = rel_diff_corr > 0) %>% 
+  ggplot(aes(x = factor(calibration), y = rel_diff_corr, fill = pos)) +
+  geom_col(position = "identity", colour = "black", width = 0.75, size = 1) +
+  geom_hline(yintercept = 0) +
+  geom_text(aes(label = rel_diff_corr), vjust = - 0.5, size = 7) +
+  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
+  lims(y = c(-12, 12)) +
+  theme_bw() +
+  labs(x = "Calibration Date",
+       y = "% Diff. Chl") +
+  theme(text = element_text(size = 30),
+        axis.text = element_text(colour = "black"),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+fig <- p1 + p4 + p2 + p5 + p3 + p6 + plot_layout(ncol = 2) + 
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 30))
+
+ggsave(here("figures", "backcali_perc_diff_panel.png"), fig,
+       width = 16, height = 17, dpi = 300)
+
+```
+
 
 
 ```{r}
