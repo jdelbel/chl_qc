@@ -68,6 +68,19 @@ cali_svc <- cali_manip %>%
   summarise(number = n()) %>% 
   arrange(flu_num, date)
 
+cali_range <- cali_manip %>% 
+  group_by(date, flu_num) %>% 
+  mutate(chl_min = min(chl_std_conc),
+         chl_max = max(chl_std_conc)) %>% 
+  ungroup() %>% 
+  filter(fm_flag == "AV") %>% 
+  arrange(flu_num, date) %>% 
+  distinct(flu_num, date, .keep_all = TRUE)
+
+chl_num <- chl %>% 
+  group_by(flurometer_serial_no, calibration) %>% 
+  summarise(chl_num = n()) %>% 
+  ungroup()
 ```
 
 ```{r}
