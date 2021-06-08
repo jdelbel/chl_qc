@@ -343,137 +343,17 @@ p4 <- cali_manip %>%
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text = element_text(colour = "black"))
   
-fig <- p2 + p1 + p4 + p3
+fig <- p2 + p1 + p4 + p3 + 
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 30))
 
 ggsave(here("figures", "slope_fm_compare.png"), 
        fig, width = 16, height = 15, dpi=300)
 ```
 
-```{r}
-#This is now my official figure showing the difference in Chlorophyll when back calibrating with the 2018 DFO calibration (instrument 1154)
-
-p1 <- chl_corr1154_plot %>% 
-  select(calibration, calibration_slope, slope_dfo_corr) %>% 
-  pivot_longer(c(calibration_slope, slope_dfo_corr),
-               names_to = "type", values_to = "slope") %>% 
-  ggplot(aes(x = factor(calibration), y = slope*10000, fill = type)) +
-  geom_point(size = 7, pch = 21, color = "black", stroke = 2) +
-  theme_bw() +
-  ylim(4, 6) +
-  labs(title = "Instrument #1154",
-       y = "Calibration Slope") +
-  scale_fill_brewer(palette = "Set1", name = element_blank(), 
-                    labels = c("Hakai", "DFO 2018 Drift Corrected (-1.5%)")) +
-  theme(legend.position = c(0.82, 0.16),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 28),
-        axis.text = element_text(colour = "black"))
-
-p2 <- chl_corr1154_plot %>% 
-  select(calibration, acid_coefficient, fm_dfo) %>% 
-  pivot_longer(c(acid_coefficient, fm_dfo),
-               names_to = "type", values_to = "fm") %>% 
-  ggplot(aes(x = factor(calibration), y = fm, fill = type)) +
-  geom_bar(stat = "identity", position = "dodge", color = "Black", size = 1) +
-  theme_bw() +
-  coord_cartesian(ylim = c(1.6, 1.9)) +
-  labs(y = "Acid Ratio (fm)") +
-  scale_fill_brewer(palette = "Set1", name = element_blank(), 
-                    labels = c("Hakai", "DFO 2018")) +
-  theme(legend.position = c(0.85, 0.93),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 28),
-        axis.text = element_text(colour = "black"))
-
-p3 <- chl_corr1154_plot %>%
-  mutate(pos = rel_diff_corr > 0) %>% 
-  ggplot(aes(x = factor(calibration), y = rel_diff_corr, fill = pos)) +
-  geom_col(position = "identity", colour = "black", width = 0.75, size = 1) +
-  geom_hline(yintercept = 0) +
-  geom_text(aes(label = rel_diff_corr), vjust = - 0.5, size = 7) +
-  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
-  lims(y = c(-22, 22)) +
-  theme_bw() +
-  labs(x = "Calibration Date",
-       y = "% Diff. Chl") +
-  theme(text = element_text(size = 28),
-        axis.text = element_text(colour = "black"))
-
-fig <- p1/p2/p3
-
-ggsave(here("figures", "1154_backcali_perc_diff.png"), fig,
-       width = 16, height = 13, dpi = 300)
-```
 
 ```{r}
-#Back calibrating 0982 with just the 2018 DFO fm values (slope seemed to be fine)
-
-p1 <- chl_corrected_0982 %>% 
-  select(calibration, calibration_slope) %>% 
-  pivot_longer(calibration_slope,
-               names_to = "type", values_to = "slope") %>% 
-  ggplot(aes(x = factor(calibration), y = slope*10000, fill = type)) +
-  geom_point(size = 7, pch = 21, color = "black", stroke = 2) +
-  theme_bw() +
-  ylim(4, 7) +
-  labs(title = "Instrument #1154",
-       y = "Calibration Slope") +
-  scale_fill_brewer(palette = "Set1", name = element_blank(), 
-                    labels = c("Hakai", "DFO 2018 Drift Corrected (-1.5%)")) +
-  theme(legend.position = c(0.82, 0.16),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 28),
-        axis.text = element_text(colour = "black"))
-
-p2 <- chl_corrected_0982 %>% 
-  select(calibration, acid_coefficient, fm_dfo) %>% 
-  pivot_longer(c(acid_coefficient, fm_dfo),
-               names_to = "type", values_to = "fm") %>% 
-  ggplot(aes(x = factor(calibration), y = fm, fill = type)) +
-  geom_bar(stat = "identity", position = "dodge", color = "Black", size = 1) +
-  theme_bw() +
-  coord_cartesian(ylim = c(1.6, 1.9)) +
-  labs(y = "Acid Ratio (fm)") +
-  scale_fill_brewer(palette = "Set1", name = element_blank(), 
-                    labels = c("Hakai", "DFO 2018")) +
-  theme(legend.position = c(0.85, 0.93),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 28),
-        axis.text = element_text(colour = "black"))
-
-p3 <- chl_corrected_0982 %>%
-  mutate(pos = rel_diff > 0) %>% 
-  ggplot(aes(x = factor(calibration), y = rel_diff, fill = pos)) +
-  geom_col(position = "identity", colour = "black", width = 0.75, size = 1) +
-  geom_hline(yintercept = 0) +
-  geom_text(aes(label = rel_diff), vjust = - 0.5, size = 7) +
-  scale_fill_manual(values = c("#007FFF", "#FF6347"), guide = FALSE) +
-  lims(y = c(-22, 22)) +
-  theme_bw() +
-  labs(x = "Calibration Date",
-       y = "% Diff. Chl") +
-  theme(text = element_text(size = 28),
-        axis.text = element_text(colour = "black"))
-
-fig <- p1/p2/p3
-
-ggsave(here("figures", "0982_backcali_perc_diff.png"), fig,
-       width = 16, height = 13, dpi = 300)
-
-```
-```{r}
-
 #Trying to put both together.
-
-
 
 p1 <- chl_corrected_0982 %>% 
   select(calibration, calibration_slope) %>% 
