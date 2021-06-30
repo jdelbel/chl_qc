@@ -1,0 +1,168 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(here)
+library(scales)
+library(patchwork)
+# library(janitor)
+# library(hutils)
+# library(obistools)
+# library(fuzzyjoin)
+```
+
+```{r}
+#Downloading dataset
+chl <- read_csv(here("files", "hakai_chl_all_2021-06-29.csv"))
+
+#Selecting relevant columns
+chl <- chl %>% 
+  select(date, site_id, line_out_depth, collected, analyzed, hakai_id, 
+         calibration, filter_type, before_acid, after_acid, chla, chla_flag, 
+         phaeo) 
+
+#Filtering for data being included in CIOOS publication ready dataset
+chl_av <- chl %>% 
+  filter(calibration > "2018-01-01" & chla_flag == "AV")
+  
+#Checking for duplicates
+chl_av <- chl_av %>% 
+  group_by(collected, site_id, line_out_depth, filter_type) %>% 
+  mutate(rep = 1:n()) %>%
+  ungroup() %>% 
+  mutate(acid_ratio = before_acid/after_acid)
+
+
+#Pivoting wider the chlorophyll data to make scatter plots.
+chl_wide <- chl_av %>% 
+  select(collected, site_id, line_out_depth, rep, filter_type, chla) %>% 
+  pivot_wider(id_cols = c(collected, site_id, line_out_depth),
+              names_from = c(filter_type, rep), 
+              values_from = chla) %>%
+  rename(bulk_chla_1 = `Bulk GF/F_1`,
+         um20_chla_1 = `20um_1`,
+         um3_chla_1 = `3um_1`,
+         GFF_chla_1 = `GF/F_1`) %>% 
+  mutate(sf_sum = um20_chla_1 + um3_chla_1 + GFF_chla_1,
+         diff = bulk_chla_1 - sf_sum)
+
+#Pivoting Acid Ratio
+ar_wide <- chl_av %>% 
+  select(collected, site_id, line_out_depth, rep, filter_type, acid_ratio) %>% 
+  pivot_wider(id_cols = c(collected, site_id, line_out_depth),
+              names_from = c(filter_type, rep), 
+              values_from = acid_ratio) %>% 
+  rename(ar_bulk = `Bulk GF/F_1`,
+         ar_20  = `20um_1`,
+         ar_3um = `3um_1`,
+         ar_gff = `GF/F_1`)
+
+#Joining Chla and Acid Ratios
+chl_wide <- chl_wide %>% 
+  left_join(ar_wide, by = c("collected", "site_id", "line_out_depth"))
+```
+
+```{r}
+#Plotting - normal scale
+p1 <- chl_wide %>% 
+  ggplot(aes(x = bulk_chla_1, y = sf_sum)) +
+  geom_point(pch = 21, fill = "grey", size = 3) +
+  geom_smooth(method = "lm") +
+  xlim(0, 12) +
+  ylim(0, 12) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  theme(text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+p2 <- chl_wide %>% 
+  ggplot() +
+  geom_point(aes(bulk_chla_1, sf_sum), pch = 21, fill = "grey", size = 3) +
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)),
+                limits = c(10^-2, 10^1)) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)),
+                limits = c(10^-2, 10^1)) +
+  scale_fill_manual(values=c("grey", "red")) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  theme(axis.title.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+fig <- p1 + p2
+
+ggsave(here("figures", "bulk_sf_scatter.png"), 
+       fig, width = 16, height = 8, dpi=300)
+
+#Clearly some scatter here - why?
+
+```
+
+```{r}
+test <- chl_wide %>% 
+  filter(!is.na(bulk_chla_1) & !is.na(sf_sum))
+
+
+#Test Cooks Distance
+mod <- lm(bulk_chla_1 ~ sf_sum, data = test)
+cooksd <- cooks.distance(mod)
+
+# Plot the Cook's Distance using the traditional 4/n criterion
+sample_size <- nrow(chl_wide)
+plot(cooksd, pch="*", cex = 2, main = "Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 4/sample_size, col = "red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>4/sample_size, names(cooksd),""), col="red")  # add labels
+
+```
+
+```{r}
+#Plot histograms of AR - Depth and Filter Type
+chl_av %>% 
+  filter(line_out_depth < 31 & !line_out_depth == 15 & !line_out_depth == 18 &
+           !line_out_depth == 25) %>% 
+  ggplot(aes(acid_ratio, fill = acid_ratio < 1.20)) +
+  geom_histogram(position = "identity", binwidth = 0.05 , alpha = 0.4, color = "black") + 
+  scale_fill_manual(values = c("black", "red")) +
+  facet_grid(line_out_depth ~ filter_type) +
+  scale_x_continuous(breaks = seq(1, 2, by = 0.2)) +
+  theme_bw() 
+  
+
+ggsave(here("figures", "ar_histogram.png"), 
+       width = 16, height = 18, dpi=300)
+```
+```{r}
+#Trying outlier tests on difference between 
+
+
+#Plot histograms of AR - Depth and Filter Type
+
+  
+
+
+```
+
+
+
+
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
