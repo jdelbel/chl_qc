@@ -112,21 +112,232 @@ ggsave(here("figures", "bulk_sf_scatter.png"),
 ```
 
 ```{r}
-test <- chl_wide %>% 
+#Looking at Cook's distance for outlier detection
+chl_wide <- chl_wide %>% 
   filter(!is.na(bulk_chla_1) & !is.na(sf_sum))
 
-
 #Test Cooks Distance
-mod <- lm(bulk_chla_1 ~ sf_sum, data = test)
+mod <- lm(bulk_chla_1 ~ sf_sum, data = chl_wide)
 cooksd <- cooks.distance(mod)
 
 # Plot the Cook's Distance using the traditional 4/n criterion
 sample_size <- nrow(chl_wide)
-plot(cooksd, pch="*", cex = 2, main = "Influential Obs by Cooks distance")  # plot cook's distance
-abline(h = 4/sample_size, col = "red")  # add cutoff line
-text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>4/sample_size, names(cooksd),""), col="red")  # add labels
+
+# plot cook's distance
+plot(cooksd, pch = "*", cex = 2, main = "Influential Obs by Cooks distance")  
+
+# add cutoff line
+abline(h = 4/sample_size, col = "red")  
+
+# add labels
+text(x = 1:length(cooksd) + 1, y = cooksd, 
+     labels = ifelse(cooksd > 4/sample_size, names(cooksd),""), col="red")  
+
+#Can look at which values exceed a selected threshold. This is sort of cool
+outlier_cooks <- chl_wide[which(cooks.distance(mod) > 0.1),]
+```
+
+
+```{r}
+#Making cooks scores a dataframe
+cooks <- as.data.frame(cooksd)
+
+#Bringing cooks scores into data
+chl_wide <- cbind(chl_wide, cooks)
+
+#Plotting
+p1 <- chl_wide %>% 
+  ggplot(aes(x = bulk_chla_1, y = sf_sum, fill = cooksd > 4/sample_size)) +
+  geom_point(pch = 21, size = 3) +
+  # geom_smooth(method = "lm") +
+  xlim(0, 12) +
+  ylim(0, 12) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  scale_fill_manual(values = c("grey", "red"), 
+                    name = "Cooks Dist.",
+                    labels = c("< 4/mean", "> 4/mean")) +
+  theme(legend.position = c(0.8, 0.1),
+        legend.background = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+p2 <- chl_wide %>% 
+  ggplot(aes(x = bulk_chla_1, y = sf_sum, fill = cooksd > 4/sample_size)) +
+  geom_point(pch = 21, size = 3) +
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)),
+                limits = c(10^-2, 10^1)) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)),
+                limits = c(10^-2, 10^1)) +
+  scale_fill_manual(values=c("grey", "red")) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  scale_fill_manual(values = c("grey", "red")) + 
+  theme(legend.position = "none",
+        legend.background = element_blank(),
+        axis.title.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+fig <- p1 + p2
+
+ggsave(here("figures", "bulk_sf_scatter_cooks.png"), 
+       fig, width = 16, height = 8, dpi=300)
+
+#Clearly some scatter here - why?
+
+
 
 ```
+```{r}
+#Plotting different Cooks threshold
+
+#Plotting
+p1 <- chl_wide %>% 
+  ggplot(aes(x = bulk_chla_1, y = sf_sum, fill = cooksd > 0.1)) +
+  # ggplot(aes(x = bulk_chla_1, y = sf_sum, fill = cooksd > 4/sample_size)) +
+  geom_point(pch = 21, size = 3) +
+  # geom_smooth(method = "lm") +
+  xlim(0, 12) +
+  ylim(0, 12) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  scale_fill_manual(values = c("grey", "red"), 
+                    name = "Cooks Dist.",
+                    labels = c("< 0.1", "> 0.1")) +
+  theme(legend.position = c(0.8, 0.1),
+        legend.background = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+p2 <- chl_wide %>% 
+  ggplot(aes(x = bulk_chla_1, y = sf_sum, fill = cooksd >  0.1)) +
+  # ggplot(aes(x = bulk_chla_1, y = sf_sum, fill = cooksd > 4/sample_size)) +
+  geom_point(pch = 21, size = 3) +
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)),
+                limits = c(10^-2, 10^1)) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)),
+                limits = c(10^-2, 10^1)) +
+  scale_fill_manual(values=c("grey", "red")) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  scale_fill_manual(values = c("grey", "red")) + 
+  theme(legend.position = "none",
+        legend.background = element_blank(),
+        axis.title.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+fig <- p1 + p2
+
+ggsave(here("figures", "bulk_sf_scatter_cooks_0.1.png"), 
+       fig, width = 16, height = 8, dpi=300)
+
+```
+
+
+
+```{r}
+#Trying cars package for outlier detection
+outliers_car <- car::outlierTest(mod) 
+test <- view(outliers_car)
+
+#Extracting outliers/extreme values 
+outliers_car_list <- names(outliers_car$p)
+
+outliers_car_list <- as.numeric(outliers_car_list)
+
+#Converting to data frame
+outliers_car_list <- as.data.frame(outliers_car_list)
+
+#Adding column to make unique for merging
+outliers_car_list <- outliers_car_list %>% 
+  mutate(car_outlier = 1) %>% 
+  rename(row_num = outliers_car_list) 
+  
+
+#Add row numbers to chl_wide for merging
+chl_wide <- chl_wide %>% 
+  mutate(row_num = row_number()) 
+
+#Merge car outliers into chl_wide for plotting
+chl_wide <- chl_wide %>% 
+  left_join(outliers_car_list, by = "row_num")
+  
+chl_wide <- chl_wide %>% 
+  mutate(car_outlier = case_when(is.na(car_outlier) ~ 0,
+                                 TRUE ~ as.numeric(car_outlier)))
+
+
+```
+
+```{r}
+#Plotting
+p1 <- chl_wide %>% 
+  ggplot(aes(x = bulk_chla_1, y = sf_sum, fill = car_outlier > 0.5)) +
+  geom_point(pch = 21, size = 3) +
+  # geom_smooth(method = "lm") +
+  xlim(0, 12) +
+  ylim(0, 12) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  scale_fill_manual(values = c("grey", "red"), 
+                    name = "Cars Outlier.",
+                    labels = c("False", "True")) +
+  theme(legend.position = c(0.8, 0.1),
+        legend.background = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+p2 <- chl_wide %>% 
+  ggplot(aes(x = bulk_chla_1, y = sf_sum, fill = car_outlier > 0.5)) +
+  geom_point(pch = 21, size = 3) +
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)),
+                limits = c(10^-2, 10^1)) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)),
+                limits = c(10^-2, 10^1)) +
+  scale_fill_manual(values=c("grey", "red")) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  scale_fill_manual(values = c("grey", "red")) + 
+  theme(legend.position = "none",
+        legend.background = element_blank(),
+        axis.title.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black"))
+
+fig <- p1 + p2
+
+ggsave(here("figures", "bulk_sf_scatter_cars.png"), 
+       fig, width = 16, height = 8, dpi=300)
+
+```
+```{r}
+#Trying DFFITS test (Similar to Cooks Distance)
+
+plot(dffits(mod), pch=23, bg='orange', cex=2, ylab="DFFITS")
+outlier_DFFITS <- chl_wide[which(dffits(mod) > 0.5 | dffits(mod) < -0.5),]
+```
+
+```{r}
+
+plot(hatvalues(mod), pch=23, bg='orange', cex=2, ylab='Hat values')
+chl_wide[which(hatvalues(mod) > 0.01),]
+
+```
+
 
 ```{r}
 #Plot histograms of AR - Depth and Filter Type
