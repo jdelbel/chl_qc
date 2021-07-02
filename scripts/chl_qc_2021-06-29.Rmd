@@ -112,6 +112,30 @@ ggsave(here("figures", "bulk_sf_scatter.png"),
 ```
 
 ```{r}
+#Plotting - normal scale
+chl_wide %>% 
+  ggplot(aes(x = bulk_chla_1, y = sf_sum)) +
+  geom_point(pch = 21, fill = "grey", size = 3) +
+  geom_smooth(method = "lm") +
+  xlim(0, 12) +
+  ylim(0, 12) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  theme(text = element_text(size = 25),
+        axis.text = element_text(colour = "black"),
+        plot.margin = margin(10, 15, 0, 0))
+
+
+ggsave(here("figures", "bulk_sf_scatter_no_log.png"), 
+       width = 10, height = 8, dpi=300)
+
+#Clearly some scatter here - why?
+
+```
+
+
+```{r}
 #Looking at Cook's distance for outlier detection
 chl_wide <- chl_wide %>% 
   filter(!is.na(bulk_chla_1) & !is.na(sf_sum))
@@ -248,7 +272,15 @@ ggsave(here("figures", "bulk_sf_scatter_cooks_0.1.png"),
 ```{r}
 #Trying cars package for outlier detection
 outliers_car <- car::outlierTest(mod) 
-test <- view(outliers_car)
+outlier_list <- view(outliers_car)
+
+outlier_list <- rownames_to_column(outlier_list)
+
+outlier_list <-  outlier_list %>% 
+  rename(row_num = rowname) %>% 
+  mutate(row_num = as.numeric(row_num))
+
+
 
 #Extracting outliers/extreme values 
 outliers_car_list <- names(outliers_car$p)
@@ -276,7 +308,11 @@ chl_wide <- chl_wide %>%
   mutate(car_outlier = case_when(is.na(car_outlier) ~ 0,
                                  TRUE ~ as.numeric(car_outlier)))
 
-
+outlier_list <- outlier_list %>% 
+  left_join(chl_wide) %>% 
+  select(row_num:line_out_depth, bulk_chla_1, sf_sum_chl = sf_sum, 
+         chl_diff = diff)
+  
 ```
 
 ```{r}
@@ -324,6 +360,32 @@ ggsave(here("figures", "bulk_sf_scatter_cars.png"),
        fig, width = 16, height = 8, dpi=300)
 
 ```
+```{r}
+#Plotting
+chl_wide %>% 
+  ggplot(aes(x = bulk_chla_1, y = sf_sum, fill = car_outlier > 0.5)) +
+  geom_point(pch = 21, size = 3) +
+  # geom_smooth(method = "lm") +
+  xlim(0, 12) +
+  ylim(0, 12) +
+  theme_bw() +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "Size Frac. Sum Chla (ug/L)") +
+  scale_fill_manual(values = c("grey", "red"), 
+                    name = "Outlier",
+                    labels = c("False", "True")) +
+  theme(legend.position = c(0.9, 0.1),
+        legend.background = element_blank(),
+        text = element_text(size = 25),
+        axis.text = element_text(colour = "black"),
+        plot.margin = margin(10, 15, 0, 0))
+
+ggsave(here("figures", "bulk_sf_scatter_cars_no_log.png"), 
+       width = 10, height = 8, dpi=300)
+
+```
+
+
 ```{r}
 #Trying DFFITS test (Similar to Cooks Distance)
 
