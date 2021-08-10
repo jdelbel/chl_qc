@@ -138,6 +138,19 @@ cali_portal <- chl %>%
 cali_values <- cali_values %>% 
   left_join(cali_portal)
 ```
+```{r}
+#Slope test - trying to see why R slopes are different than Excel slopes
+test <- cali_manip %>% 
+  filter(fm_flag == "AV" & as.character(date) == "2015-03-19") 
+
+test2 <- lm(chl_std_conc ~ rb_blank_corr, data = test)
+
+test3 <- lm(chl_std_conc ~ 0 + rb_blank_corr, data = test)
+
+summary(test2)
+summary(test3)
+
+```
 
 
 ```{r}
@@ -329,7 +342,8 @@ p3 <- cali_manip %>%
   
 
 p4 <- cali_manip %>% 
-  filter(fm_flag == "AV" & flu_num == 720000982 & !as.character(date) == "2018-04-17") %>% 
+  filter(fm_flag == "AV" & flu_num == 720000982 & 
+           !as.character(date) == "2018-04-17") %>% 
   ggplot(aes(factor(date), fm_blank_corr, fill = lab)) +
   geom_boxplot() +
   theme_bw() +
@@ -475,43 +489,87 @@ ggsave(here("figures", "backcali_perc_diff_panel.png"), fig,
 
 ```
 
+```{r}
+#Solid standards for 1154 as a function of calibration date
+ss_1154 <- ss %>% 
+  filter(flurometer_serial_no == 720001154 &
+           before_acid < 13500 & before_acid > 12000 &
+           !as.character(calibration) == "2014-11-21")
+
+slope_1154 <- cali_values %>% 
+  filter(flu_num == 720001154 & !as.character(date) == "2018-04-17")
+
+ss_1154_mean <- ss_1154 %>% 
+  group_by(calibration) %>% 
+  summarize(mean_ss = mean(before_acid))
+
+p1 <- ggplot() +
+  geom_boxplot(data = ss_1154, aes(x = factor(calibration), y = before_acid),
+               fill = "blue", alpha = 0.5) +
+  geom_jitter(data = ss_1154, aes(x = factor(calibration), y = before_acid),
+              pch = 21, fill = "grey", size = 3) +
+  geom_boxplot(aes(x = factor("2018-05-04"), y = 12246.33), 
+             pch = 21, fill = "blue", alpha = 0.5) +
+  geom_point(aes(x = factor("2018-05-04"), y = 12246.33), 
+             pch = 21, fill = "grey", size = 3) +
+  geom_point(data = slope_1154, aes(x = factor(date), y = estimate*26000000), 
+             pch = 23, size = 6, color = "black", fill = "red", alpha = 0.7) +
+  theme_bw() +
+  scale_y_continuous(name = "Solid Standard (RFU)", limits = c(10500, 15000), 
+  sec.axis = sec_axis(~./3000, name = bquote(Cali.~Slope~(k[x]~" \u00D7"~10^4)))) +
+  theme(
+      axis.title.y = element_text(color = "black"),
+      axis.title.y.right = element_text(color = "red"),
+      axis.text.y.right = element_text(color = "red"),
+      axis.text.y.left = element_text(colour = "black"),
+      axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+      text = element_text(size = 30))
+
+p2 <- blanks %>% 
+  filter(flurometer_serial_no == 720001154 & 
+           date > "2015-01-01" & !as.character(calibration) == "2014-11-21") %>% 
+  ggplot(aes(x = factor(calibration), y = before_acid)) +
+  geom_jitter(pch = 21, fill = "grey", size = 3, alpha = 0.8) +
+  geom_boxplot(fill = "blue", alpha = 0.5) +
+  geom_boxplot(aes(x = factor("2018-05-04"), y = 1124.29), 
+             pch = 21, fill = "blue", alpha = 0.5) + 
+  geom_point(aes(x = factor("2018-05-04"), y = 1124.29), 
+             pch = 21, fill = "grey", size = 3, alpha = 0.8) +
+  theme_bw() +
+  labs(x = "Calibration Date",
+       y = "Acetone Blank (RFU)") +
+  theme(text = element_text(size = 30),
+        axis.text = element_text(colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+  
+fig <- p1/p2
+
+ggsave(here("figures", "solid_standard_test.png"), fig,
+       width = 16, height = 12, dpi = 300)
+
+```
 
 
 ```{r}
-#Working with solid standards - I should make these a supplementary figure - add calibration values.
-ss %>% 
-  filter(flurometer_serial_no == 720001154) %>% 
-  mutate(low = before_acid < 15000) %>% 
-  ggplot(aes(x = factor(calibration), y = before_acid, fill = low)) +
-  geom_boxplot() 
-  
-ss %>% 
-  filter(flurometer_serial_no == 720000982) %>% 
-  # mutate(low = before_acid > 15000) %>% 
-  ggplot(aes(x = date, y = before_acid)) +
-  geom_point() +
-  ylim(0, 30000)
-
+#Trying to look at solid standards for 0982 - inconclusive. Not much data.
 ss %>% 
   filter(flurometer_serial_no == 720000982 & date < "2019-09-10") %>% 
   mutate(low = before_acid < 15000) %>% 
   ggplot(aes(x = factor(calibration), y = before_acid, fill = low)) +
   geom_boxplot() 
-
-
-
 ```
 
 ```{r}
 #Looking at blanks - I should make these a supplimentary figure - add calibration and after acid values.
 
 blanks %>% 
-  filter(flurometer_serial_no == 720000982 & before_acid < 5000) %>% 
+  filter(flurometer_serial_no == 720000982 & before_acid < 1500) %>% 
   ggplot(aes(x = date, y = before_acid)) +
   geom_point()
 
 blanks %>% 
-  filter(flurometer_serial_no == 720000982 & before_acid < 5000) %>% 
+  filter(flurometer_serial_no == 720000982 & before_acid < 1500) %>% 
   ggplot(aes(x = factor(calibration), y = before_acid)) +
   geom_boxplot()
 
@@ -522,7 +580,7 @@ blanks %>%
   geom_point()
 
 blanks %>% 
-  filter(flurometer_serial_no == 720001154 & before_acid < 5000 & 
+  filter(flurometer_serial_no == 720001154 & 
            date > "2015-01-01") %>% 
   ggplot(aes(x = factor(calibration), y = before_acid)) +
   geom_boxplot()
