@@ -549,6 +549,61 @@ ggsave(here("figures", "solid_standard_test.png"), fig,
        width = 16, height = 12, dpi = 300)
 
 ```
+```{r}
+ss_1154 %>% 
+ggplot(aes(x = date, y = before_acid, fill = factor(calibration))) +
+  geom_point(pch = 21, color = "black", size = 2, alpha = 0.8) +
+  geom_smooth(aes(group = factor(calibration)), method = "lm")
+```
+```{r}
+blanks %>% 
+  filter(flurometer_serial_no == 720001154 & 
+           date > "2015-01-01" & !as.character(calibration) == "2014-11-21" &
+           before_acid < 3000 & before_acid > 1000) %>% 
+  ggplot(aes(x = date, y = before_acid, fill = factor(calibration))) +
+  geom_point(pch = 21, color = "black", size = 2, alpha = 0.8) +
+  geom_smooth(aes(group = factor(calibration)), method = "lm")
+```
+```{r}
+#While annoying, these plots are probably more instructive 
+
+#Try merging data (left join with blanks as there is more available) and plotting so that groups are the same (probably easiest to do this with facet_wrap)
+
+ss_1154_test <- ss_1154 %>% 
+  select(date, flurometer_serial_no, calibration, before_acid) %>% 
+  rename(before_acid_ss = before_acid)
+
+blanks_test <- blanks %>%
+  filter(flurometer_serial_no == 720001154) %>% 
+  select(date, before_acid, calibration) %>% 
+  group_by(date) %>% 
+  mutate(ba_blank_mean = mean(before_acid),
+            ba_blank_sd = sd(before_acid)) %>% 
+  ungroup() %>% 
+  distinct(ba_blank_mean, .keep_all = TRUE) %>% 
+  filter(calibration > "2015-01-01")
+
+blanks_test_2 <- blanks_test %>% 
+  left_join(ss_1154_test, by = "date")
+```
+
+```{r}
+blanks_test_2 %>% 
+  filter(ba_blank_mean < 3000 & before_acid > 1000) %>% 
+  ggplot(aes(x = date, y = ba_blank_mean, fill = factor(calibration.x))) +
+  geom_point(pch = 21, color = "black", size = 2, alpha = 0.8) +
+  geom_smooth(method = "lm") +
+  ylim(1000, 3000)
+
+```
+
+
+```{r}
+blanks_test_2 %>% 
+  ggplot(aes(x = date, y = before_acid_ss, fill = factor(calibration.x))) +
+  geom_point(pch = 21, color = "black", size = 2, alpha = 0.8) +
+  geom_smooth(method = "lm") 
+```
 
 
 ```{r}
