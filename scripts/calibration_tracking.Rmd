@@ -549,13 +549,17 @@ ggsave(here("figures", "solid_standard_test.png"), fig,
        width = 16, height = 12, dpi = 300)
 
 ```
+
 ```{r}
-ss_1154 %>% 
-ggplot(aes(x = date, y = before_acid, fill = factor(calibration))) +
-  geom_point(pch = 21, color = "black", size = 2, alpha = 0.8) +
-  geom_smooth(aes(group = factor(calibration)), method = "lm")
-```
-```{r}
+#Why are all of the 2020 blanks on the same day?
+
+blanks_1154 <- blanks %>% 
+  filter(flurometer_serial_no == 720001154) %>% 
+  select(date, before_acid, calibration) %>% 
+  group_by(date) %>%
+  mutate(ba_blank_mean = mean(before_acid),
+            ba_blank_sd = sd(before_acid))
+
 blanks %>% 
   filter(flurometer_serial_no == 720001154 & 
            date > "2015-01-01" & !as.character(calibration) == "2014-11-21" &
@@ -564,6 +568,7 @@ blanks %>%
   geom_point(pch = 21, color = "black", size = 2, alpha = 0.8) +
   geom_smooth(aes(group = factor(calibration)), method = "lm")
 ```
+
 ```{r}
 #While annoying, these plots are probably more instructive 
 
@@ -589,11 +594,9 @@ blanks_test_2 <- blanks_test %>%
 
 ```{r}
 blanks_test_2 %>% 
-  filter(ba_blank_mean < 3000 & before_acid > 1000) %>% 
   ggplot(aes(x = date, y = ba_blank_mean, fill = factor(calibration.x))) +
   geom_point(pch = 21, color = "black", size = 2, alpha = 0.8) +
-  geom_smooth(method = "lm") +
-  ylim(1000, 3000)
+  geom_smooth(method = "lm") 
 
 ```
 
@@ -603,6 +606,65 @@ blanks_test_2 %>%
   ggplot(aes(x = date, y = before_acid_ss, fill = factor(calibration.x))) +
   geom_point(pch = 21, color = "black", size = 2, alpha = 0.8) +
   geom_smooth(method = "lm") 
+```
+```{r}
+startTime <- as.Date("2015-01-01")
+endTime <- as.Date("2021-03-01")
+startEnd <- c(startTime, endTime)
+
+blanks_test_2 <- blanks_test_2 %>% 
+  mutate(date = as.Date(date))
+
+slope_1154 <- slope_1154 %>% 
+  mutate(date = as.Date(date)) 
+blanks_test_3 <- blanks_test_2 %>% 
+  full_join(slope_1154)
+
+
+
+p1 <- blanks_test_2 %>% 
+  ggplot(aes(x = date, y = before_acid_ss, fill = factor(calibration.x))) +
+  geom_point(pch = 21, color = "black", size = 4, alpha = 0.8) +
+  geom_smooth(method = "lm") +
+  geom_point(data = slope_1154, aes(x = date, y = estimate*26000000), 
+             pch = 23, size = 6, color = "black", fill = "red", alpha = 0.7) +
+  theme_bw() +
+  labs(y = "Solid Standard (RFU)") +
+  scale_x_date(limits = startEnd,
+               breaks = scales::date_breaks("6 month"),
+               labels = scales::date_format("%Y")) +
+  scale_y_continuous(name = "Solid Standard (RFU)", limits = c(10500, 15000), 
+  sec.axis = sec_axis(~./3000, name = bquote(Cali.~Slope~(k[x]~" \u00D7"~10^4)))) +
+  theme(axis.title.y = element_text(color = "black"),
+        axis.title.y.right = element_text(color = "red"),
+        axis.text.y.right = element_text(color = "red"),
+        axis.text.y.left = element_text(colour = "black"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 30),
+        legend.position = "none")
+
+p2 <- blanks_test_2 %>% 
+  filter(ba_blank_mean < 3000) %>% 
+  ggplot(aes(x = date, y = ba_blank_mean, fill = factor(calibration.x))) +
+  geom_point(pch = 21, color = "black", size = 4, alpha = 0.8) +
+  geom_smooth(method = "lm") +
+  ylim(0, 3000) +
+  scale_x_date(limits = startEnd,
+               breaks = scales::date_breaks("12 month"),
+               labels = scales::date_format("%Y")) +
+  theme_bw() +
+  labs(x = "Calibration Date",
+       y = "Acetone Blank (RFU)",
+       fill = "Calibration") +
+  theme(text = element_text(size = 30),
+        axis.text = element_text(colour = "black"),
+        legend.position = c(0.9, 0.75))
+  
+fig <- p1/p2
+
+ggsave(here("figures", "test.png"), fig,
+       width = 16, height = 12, dpi = 300)
 ```
 
 
