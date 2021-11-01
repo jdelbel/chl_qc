@@ -7,7 +7,7 @@ This workbook quanitifies how many samples were collected in 2021 - at which sta
 
 ```{r}
 #Load packages
-library(tidyverse)
+library(tidyverse)  
 library(readxl)
 library(here)
 library(patchwork)
@@ -60,7 +60,7 @@ chl <- chl %>%
 
 ```{r}
 #Order filter types for plotting
-order <- c(   "20um", "3um", "GF/F", "Bulk GF/F")
+order <- c("20um", "3um", "GF/F", "Bulk GF/F")
 
 #Chemtax - Specify order of phyto groups for figures
 chl <- arrange(mutate(chl, filter_type = factor(filter_type,
@@ -176,7 +176,7 @@ f1 <- chl %>%
   # ylim(0, 25) +
   ylab("# of samples") +
   theme_bw() +
-  theme(legend.position = c(0.12, 0.81),
+  theme(legend.position = c(0.08, 0.81),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         text = element_text(size = 25))
@@ -195,7 +195,7 @@ f2 <- chl %>%
   # ylim(0, 25) +
   ylab("# of samples") +
   theme_bw() +
-  theme(legend.position = c(0.07, 0.79),
+  theme(legend.position = c(0.05, 0.79),
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 90, vjust = 0.4),
         text = element_text(size = 25))
@@ -207,7 +207,7 @@ ggsave(here("figures", "sample_numbers_food-bio-toba.png"), fig,
 ```
 ```{r}
 f1 <- chl %>% 
-  filter(group == "ocean") %>% 
+  filter(group == "oceanography") %>% 
   group_by(filter_type, site_id) %>% 
   summarise(n_filt = n()) %>% 
   ungroup() %>% 
@@ -219,13 +219,13 @@ f1 <- chl %>%
   # ylim(0, 25) +
   ylab("# of samples") +
   theme_bw() +
-  theme(legend.position = c(0.12, 0.81),
+  theme(legend.position = c(0.08, 0.81),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         text = element_text(size = 25))
 
 f2 <- chl %>% 
-  filter(group == "ocean") %>% 
+  filter(group == "oceanography") %>% 
   group_by(line_out_depth, site_id) %>% 
   summarise(n_dep = n()) %>% 
   ungroup() %>% 
@@ -238,7 +238,7 @@ f2 <- chl %>%
   # ylim(0, 25) +
   ylab("# of samples") +
   theme_bw() +
-  theme(legend.position = c(0.07, 0.79),
+  theme(legend.position = c(0.05, 0.65),
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 90, vjust = 0.4),
         text = element_text(size = 25))
@@ -247,3 +247,31 @@ fig <- f1/f2
 
 ggsave(here("figures", "sample_numbers_ocean.png"), fig,
        width = 13, height = 12, dpi = 300)
+```
+
+```{r}
+#So, can we reduce the depths we are collecting size fractionated chlorophyll???
+
+#Crossed checked for duplicates and didn't find any.
+
+qu39 <- chl %>% 
+  filter(group == "oceanography" & site_id == "QU39" & !filter_type == "Bulk GF/F") %>%
+  group_by(date, line_out_depth) %>% 
+  mutate(sum_chl = sum(chla)) %>% 
+  ungroup() %>% 
+  mutate(perc = chla/sum_chl)
+
+qu39 %>% 
+  filter(filter_type == "20um") %>% 
+  ggplot(aes(x = date, y = perc, color = as.factor(line_out_depth))) +
+  geom_line()
+  
+
+
+
+
+
+
+
+```
+
