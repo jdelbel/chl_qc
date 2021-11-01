@@ -1,0 +1,203 @@
+---
+title: ERDDAP Research Dataset Check
+output: html_notebook
+---
+
+This script is used for cross checking the chlorophyll data submitted to the ERDDAP research dataset. 
+
+```{r}
+#Load packages
+
+library(tidyverse)
+library(here)
+```
+
+```{r}
+#Upload dataset
+c <- read_csv(here("files", "erddap_2021-01-11.csv"))
+
+#Drop second row that contains units
+c <- c[-c(1), ]
+
+```
+
+```{r}
+#Creating size_fractionated sum column for comparison with bulk 
+
+#Converting columns with concentrations from character to numeric - were uploaded as character because of row that contained units
+c[ ,12:23] <- sapply(c[ ,12:23], as.numeric)
+
+#Calculating size fractionated sum. This calculation ignores NAs, which is good because non-complete size fraction sets will not be included in comparisons
+c <- c %>% 
+  mutate(sf_sum = chla_20um + chla_3_20um + chla_gff_3um)
+
+#Making a date column with h:m:s
+c <- c %>% 
+  mutate(date = lubridate::date(time)) %>% 
+  relocate(date, .after = time)
+```
+
+```{r}
+#Looking into what sites and stations comprise the dataset.
+
+sites <- c %>% 
+  group_by(site_id) %>% 
+  summarise(n_site = n())
+
+#Looking into numbers of each filter type for each station - which stations collect size-fractionated samples?
+# c_long <- c %>% 
+#   select(work_area:date, chla_20um, chla_3_20um, chla_gff_3um:chla_bulk_gff) %>% 
+#   pivot_longer(cols = c(chla_20um:chla_bulk_gff), names_to = "filter_type",
+#                values_to = "chla")
+# 
+# n_filt <- c_long %>% 
+#   filter(is.na(chla)) %>% 
+#   group_by(site_id, filter_type) %>% 
+#   summarise(n_filt = n()) %>% 
+#   ungroup() %>% 
+#   pivot_wider(names_from = filter_type, values_from = n_filt) %>% 
+#   relocate(chla_bulk_gff, .after = chla_gff_3um)
+
+survey <- c %>% 
+  distinct(survey)
+
+site_survey <- c %>% 
+  distinct(site_id, survey)
+
+ns <- c %>% 
+  filter(survey == "MACRO_MGEO" | survey == "MACRO_MGEO,KWAK" | 
+           survey == "MACRO_MGEO,QCS_V2" | survey == "QCS_V2,MACRO_MGEO")
+
+#Want to find the earliest and latest date in data-set. 
+date <- c %>% 
+  summarise(min_date = min(date),
+            max_date = max(date))
+
+```
+
+```{r}
+#Things that have come up
+
+#1 - Nearshore and Johnstone Strait stations showing up
+#2 - Do we keep SF samples where concentrations are missing from a filter?
+
+```
+
+
+
+```{r}
+#Scatter looking at bulk chlorophyll versus size_fractionated sum
+c %>%
+  filter(!is.na(sf_sum)) %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum, fill = site_id)) + 
+  geom_point(pch = 21) +
+  xlim(0, 12) +
+  ylim(0, 12) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QU39") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QU43") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "KC10") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "DFO2") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "PRUTH") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QU38") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QU29") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "FZH01") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QCS01") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "DFO5") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "JS12") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "JS1") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "NBCH01") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  theme_bw()
+```
+
+
