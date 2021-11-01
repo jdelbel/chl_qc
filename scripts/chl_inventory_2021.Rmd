@@ -1,0 +1,121 @@
+---
+title: "2021 Chlorophyll Data Assessment"
+output: html_notebook
+---
+
+This workbook quanitifies how many samples were collected in 2021 - at which stations, depths and groups.
+
+```{r}
+#Load packages
+library(tidyverse)
+library(readxl)
+library(here)
+```
+
+```{r}
+#Read data file downloaded from the portal - downloaded on 2021-10-06, so in this version does not include entire year
+chl <- read_csv(here("files", "chl_2021-10-06.csv"))
+
+```
+
+```{r}
+#Limiting to pertinent columns
+chl <- chl %>% 
+  select(date, work_area, survey, site_id, line_out_depth, filter_type, chla)
+```
+
+```{r}
+#Creating some summary lists to see what stations are being collected by each group
+
+#Making a list of distinct stations and surveys
+stations <- chl %>% 
+  distinct(site_id)
+
+#Making a list of distinct surveys
+surveys <- chl %>% 
+  distinct(survey)
+
+#Making a list of distinct survey/stations matches
+stations_survey <- chl %>% 
+  distinct(survey, site_id)
+```
+
+```{r}
+#Classifying stations/surveys by group that collected them - trying it first on the truncated list
+chl <- chl %>%
+  mutate(group = NA) %>% 
+  mutate(group = case_when(survey == "MACRO_MGEO" | survey == "ROCKY" ~ "nearshore",
+                           survey == "ZOOPSPRINT" ~ "foodwebs",
+                           survey == "BIOWEEKLY" ~ "biomarathon",
+                           survey == "TOBA" ~ "toba",
+                           survey == "QOMA1" ~ "oceanography",
+                           survey == "QOMA5" ~ "oceanography",
+                           survey == "QCS_V1" ~ "oceanography",
+                           survey == "KWAK" ~ "oceanography", 
+                           survey == "RVRS" ~ "oceanography",
+                           TRUE ~ as.character(group)))
+
+```
+
+```{r}
+#Order filter types for plotting
+order <- c(   "20um", "3um", "GF/F", "Bulk GF/F")
+
+#Chemtax - Specify order of phyto groups for figures
+chl <- arrange(mutate(chl, filter_type = factor(filter_type,
+                                levels = order)))
+```
+
+```{r}
+#Calculating total number of samples per group
+totals <- chl %>% 
+  group_by(group) %>%
+  summarize(n_tot = n()) %>% 
+  ungroup()
+```
+
+
+```{r}
+#Plotting number of samples per group - stacked by filter type
+
+chl %>% 
+  group_by(filter_type, group) %>% 
+  summarise(n_filt = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = reorder(group, n_filt), y = n_filt, fill = filter_type)) +
+  geom_bar(stat = "identity", color = "black") +
+  geom_text(aes(x = group, y = n_tot, label = n_tot, fill = NULL),
+              data = totals, vjust = -0.5) +
+  ggsci::scale_fill_npg(name = "Filter Size") +
+  ylim(0, 1250) +
+  ylab("# of samples") +
+  theme_bw() +
+  theme(legend.position = c(0.1, 0.8),
+        axis.title.x = element_blank())
+
+```
+
+```{r}
+
+
+```
+
+
+```{r}
+#Plotting number of samples per group - side by side filter type
+
+chl %>% 
+  group_by(filter_type, group) %>% 
+  summarise(n_filt = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = as.factor(group), y = n_filt, fill = filter_type, group = filter_type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  geom_text(aes(label = n_filt, fill = NULL), 
+            position = position_dodge(width = 1), vjust = -0.5) +
+  ggsci::scale_fill_npg() +
+  ylim(0, 400) +
+  ylab("# of samples") +
+  theme_bw() +
+  theme(axis.title.x = element_blank())
+
+```
