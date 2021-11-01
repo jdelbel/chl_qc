@@ -10,6 +10,7 @@ This workbook quanitifies how many samples were collected in 2021 - at which sta
 library(tidyverse)
 library(readxl)
 library(here)
+library(patchwork)
 ```
 
 ```{r}
@@ -96,12 +97,6 @@ chl %>%
 ```
 
 ```{r}
-
-
-```
-
-
-```{r}
 #Plotting number of samples per group - side by side filter type
 
 chl %>% 
@@ -119,3 +114,136 @@ chl %>%
   theme(axis.title.x = element_blank())
 
 ```
+
+```{r}
+#Plotting number of samples per group - stacked by filter type
+
+f1 <- chl %>% 
+  filter(group == "nearshore") %>% 
+  group_by(filter_type, site_id) %>% 
+  summarise(n_filt = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = reorder(site_id, n_filt), y = n_filt, fill = filter_type)) +
+  geom_bar(stat = "identity", color = "black") +
+  # geom_text(aes(x = site_id, y = n_tot, label = n_tot, fill = NULL)
+  #           , vjust = -0.5) +
+  ggsci::scale_fill_npg(name = "Filter Size") +
+  ylim(0, 25) +
+  ylab("# of samples") +
+  theme_bw() +
+  theme(legend.position = c(0.12, 0.8),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 25))
+
+f2 <- chl %>% 
+  filter(group == "nearshore") %>% 
+  group_by(line_out_depth, site_id) %>% 
+  summarise(n_dep = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = reorder(site_id, n_dep), y = n_dep, 
+             fill = as.factor(line_out_depth))) +
+  geom_bar(stat = "identity", color = "black") +
+  # geom_text(aes(x = site_id, y = n_tot, label = n_tot, fill = NULL)
+  #           , vjust = -0.5) +
+  ggsci::scale_fill_npg(name = "Depth") +
+  ylim(0, 25) +
+  ylab("# of samples") +
+  theme_bw() +
+  theme(legend.position = c(0.07, 0.7),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.4),
+        text = element_text(size = 25))
+
+fig <- f1/f2
+
+ggsave(here("figures", "sample_numbers_nearshore.png"), fig,
+       width = 11, height = 12, dpi = 300)
+```
+
+
+```{r}
+f1 <- chl %>% 
+  filter(group == "foodwebs" | group == "biomarathon" | group == "toba") %>% 
+  group_by(filter_type, site_id) %>% 
+  summarise(n_filt = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = reorder(site_id, n_filt), y = n_filt, fill = filter_type)) +
+  geom_bar(stat = "identity", color = "black") +
+  # geom_text(aes(x = site_id, y = n_tot, label = n_tot, fill = NULL)
+  #           , vjust = -0.5) +
+  ggsci::scale_fill_npg(name = "Filter Size") +
+  # ylim(0, 25) +
+  ylab("# of samples") +
+  theme_bw() +
+  theme(legend.position = c(0.12, 0.81),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 25))
+
+f2 <- chl %>% 
+  filter(group == "foodwebs" | group == "biomarathon" | group == "toba") %>% 
+  group_by(line_out_depth, site_id) %>% 
+  summarise(n_dep = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = reorder(site_id, n_dep), y = n_dep, 
+             fill = as.factor(line_out_depth))) +
+  geom_bar(stat = "identity", color = "black") +
+  # geom_text(aes(x = site_id, y = n_tot, label = n_tot, fill = NULL)
+  #           , vjust = -0.5) +
+  ggsci::scale_fill_npg(name = "Depth") +
+  # ylim(0, 25) +
+  ylab("# of samples") +
+  theme_bw() +
+  theme(legend.position = c(0.07, 0.79),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.4),
+        text = element_text(size = 25))
+
+fig <- f1/f2
+
+ggsave(here("figures", "sample_numbers_food-bio-toba.png"), fig,
+       width = 13, height = 12, dpi = 300)
+```
+```{r}
+f1 <- chl %>% 
+  filter(group == "ocean") %>% 
+  group_by(filter_type, site_id) %>% 
+  summarise(n_filt = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = reorder(site_id, n_filt), y = n_filt, fill = filter_type)) +
+  geom_bar(stat = "identity", color = "black") +
+  # geom_text(aes(x = site_id, y = n_tot, label = n_tot, fill = NULL)
+  #           , vjust = -0.5) +
+  ggsci::scale_fill_npg(name = "Filter Size") +
+  # ylim(0, 25) +
+  ylab("# of samples") +
+  theme_bw() +
+  theme(legend.position = c(0.12, 0.81),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 25))
+
+f2 <- chl %>% 
+  filter(group == "ocean") %>% 
+  group_by(line_out_depth, site_id) %>% 
+  summarise(n_dep = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = reorder(site_id, n_dep), y = n_dep, 
+             fill = as.factor(line_out_depth))) +
+  geom_bar(stat = "identity", color = "black") +
+  # geom_text(aes(x = site_id, y = n_tot, label = n_tot, fill = NULL)
+  #           , vjust = -0.5) +
+  ggsci::scale_fill_npg(name = "Depth") +
+  # ylim(0, 25) +
+  ylab("# of samples") +
+  theme_bw() +
+  theme(legend.position = c(0.07, 0.79),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.4),
+        text = element_text(size = 25))
+
+fig <- f1/f2
+
+ggsave(here("figures", "sample_numbers_ocean.png"), fig,
+       width = 13, height = 12, dpi = 300)
