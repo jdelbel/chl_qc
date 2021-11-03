@@ -101,6 +101,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("QU39") +
   theme_bw()
 
 c %>%
@@ -109,6 +110,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("QU43") +
   theme_bw()
 
 c %>%
@@ -117,6 +119,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("KC10") +
   theme_bw()
 
 c %>%
@@ -125,6 +128,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("DFO2") +
   theme_bw()
 
 c %>%
@@ -133,6 +137,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("PRUTH") +
   theme_bw()
 
 c %>%
@@ -141,6 +146,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("QU38") +
   theme_bw()
 
 c %>%
@@ -149,6 +155,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("QU29") +
   theme_bw()
 
 c %>%
@@ -157,6 +164,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("FZH01") +
   theme_bw()
 
 c %>%
@@ -165,6 +173,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("QCS01") +
   theme_bw()
 
 c %>%
@@ -173,6 +182,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("DFO5") +
   theme_bw()
 
 c %>%
@@ -181,6 +191,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("JS12") +
   theme_bw()
 
 c %>%
@@ -189,6 +200,7 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("JS1") +
   theme_bw()
 
 c %>%
@@ -197,7 +209,74 @@ c %>%
   geom_point() +
   xlim(0, 15) +
   ylim(0, 15) +
+  ggtitle("NBCH01") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "BU4") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("BU4") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "KN3") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("KN3") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "KWY01") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("KWY01") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "TO2") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("TO2") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "TO5") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("TO5") +
   theme_bw()
 ```
 
+```{r}
+kc10 <- c %>% 
+  filter(site_id == "KC10") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+
+dfo2 <- c %>% 
+  filter(site_id == "DFO2") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+
+pruth <- c %>% 
+  filter(site_id == "PRUTH") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+
+qu38 <- c %>% 
+  filter(site_id == "QU38") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+
+qcs01 <- c %>% 
+  filter(site_id == "QCS01") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+```
 
