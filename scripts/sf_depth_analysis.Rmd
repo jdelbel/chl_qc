@@ -1,0 +1,108 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+#Load packages
+library(tidyverse)  
+library(readxl)
+library(here)
+library(patchwork)
+
+```
+
+```{r}
+#Read data file downloaded from the portal - 
+c <- read_csv(here("files", "qu39_kc10_dfo2_depth.csv"))
+
+```
+
+```{r}
+#Limiting to pertinent columns
+c <- c %>% 
+  select(date, collected, work_area, survey, site_id, line_out_depth,
+         filter_type, chla, chla_flag)
+
+#Adding year column
+c <- c %>% 
+  mutate(year = lubridate::year(date))
+
+#Only including AV and unflagged data
+c_qc <- c %>% 
+  filter(!is.na(chla) & (chla_flag == "AV" | chla_flag == "ADL" | is.na(chla_flag)))
+
+#Removing bulk data
+c_qc <- c_qc %>% 
+  filter(!filter_type == "Bulk GF/F")
+
+#Removing exact duplicates -  not replicates. Not sure why these are happening
+c_qc <- c_qc %>% 
+  group_by(date, site_id, line_out_depth, filter_type) %>% 
+  distinct(.keep_all = TRUE) %>% 
+  ungroup()
+
+#Calculating daily mean where there are replicates - OK for now
+c_dm <- c_qc %>% 
+  group_by(date, site_id, line_out_depth, filter_type) %>% 
+  summarise(chla_dm = mean(chla),
+            chla_sdev = sd(chla),
+            n_samp = n()) %>% 
+  ungroup() %>% 
+  mutate_at(vars(chla_dm, chla_sdev), funs(round(., 2)))
+
+
+#Pivoting to calculate size-fractionated sum
+c_wide <- c_dm %>%
+  select(date:chla_dm) %>% 
+  pivot_wider(names_from = filter_type, values_from = chla_dm) %>%
+  mutate(sum = `20um` + `3um` + `GF/F`) %>% 
+  select(date, site_id, line_out_depth, sum)
+
+# %>% 
+#   select(date:line_out_depth, sum)
+
+#Bringing sum into long format (did it this way as accross column sum will throw NA is not all filters present). Then, calculating the percent size fraction.
+c_dm <- c_dm %>% 
+  left_join(c_wide) %>% 
+  filter(!is.na(sum)) 
+
+c_dm <- c_dm %>% 
+  mutate(perc = chla_dm/sum) %>% 
+  mutate_at(vars(perc), funs(round(., 2)))
+
+cl_c <- c_dm %>%
+  select(date:chla_dm) %>% 
+  pivot_wider(names_from = line_out_depth, values_from = chla_dm) %>% 
+  rename(m0 = `0`, m5 = `5`, m1 = `1`, m10 = `10`, m20 = `20`, m30 = `30`)
+
+cl_p <- c_dm %>%
+  select(date:filter_type, perc) %>% 
+  pivot_wider(names_from = line_out_depth, values_from = perc) %>% 
+  rename(m0 = `0`, m5 = `5`, m1 = `1`, m10 = `10`, m20 = `20`, m30 = `30`)
+  
+```
+
+
+
+```{r}
+c_dm %>% 
+  filter(site_id == "QU39" & filter_type == "20um") %>% 
+  ggplot(aes(x = date, y = chla_dm, color = as.factor(line_out_depth))) +
+  geom_point() +
+  geom_line()
+```
+```{r}
+cl_c %>% 
+  filter(site_id == "QU39" & filter_type == "20um") %>% 
+  ggplot(aes(x = m5, y = m30)) +
+  geom_point()
+
+cl_p %>% 
+  filter(site_id == "QU39" & filter_type == "20um") %>% 
+  ggplot(aes(x = m5, y = m0)) +
+  geom_point()
+```
+
