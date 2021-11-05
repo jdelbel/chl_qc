@@ -89,11 +89,18 @@ cl_p <- c_dm %>%
 
 ```{r}
 c_dm %>% 
-  filter(site_id == "QU39" & filter_type == "20um") %>% 
-  ggplot(aes(x = date, y = chla_dm, color = as.factor(line_out_depth))) +
+  filter(site_id == "QU39") %>% 
+  ggplot(aes(x = date, y = log10(chla_dm), color = as.factor(line_out_depth))) +
   geom_point() +
-  geom_line()
+  geom_line() +
+  facet_wrap(~ filter_type, ncol = 1) +
+  theme_bw() 
+  
+ggsave(here("figures", "QU39_timeseries_filter_type.png"),
+       width = 16, height = 12, dpi = 300)
 ```
+
+
 ```{r}
 cl_c %>% 
   filter(site_id == "QU39" & filter_type == "20um") %>% 
