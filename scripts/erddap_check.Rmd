@@ -1,0 +1,396 @@
+---
+title: ERDDAP Research Dataset Check
+output: html_notebook
+---
+
+This script is used for cross checking the chlorophyll data submitted to the ERDDAP research dataset. 
+
+```{r}
+#Load packages
+
+library(tidyverse)
+library(here)
+```
+
+```{r}
+#Upload dataset - Pre-changes
+c_old <- read_csv(here("files", "erddap_2021-01-11.csv"))
+
+#Newest erddap upload - date in file name
+c <- read_csv(here("files", "erddap-2021-11-08.csv"))
+
+#portal upload for QC. 
+c_p <- read_csv(here("files", "portal_erddap_2021-11-08.csv"))
+
+#Drop second row that contains units
+c <- c[-c(1), ]
+
+```
+
+```{r}
+#Creating size_fractionated sum column for comparison with bulk 
+
+#Converting columns with concentrations from character to numeric - were uploaded as character because of row that contained units
+c[ ,12:23] <- sapply(c[ ,12:23], as.numeric)
+
+#Calculating size fractionated sum. This calculation ignores NAs, which is good because non-complete size fraction sets will not be included in comparisons
+c <- c %>% 
+  mutate(sf_sum = chla_20um + chla_3_20um + chla_gff_3um)
+
+#Making a date column without h:m:s
+c <- c %>% 
+  mutate(date = lubridate::date(time)) %>% 
+  relocate(date, .after = time)
+```
+
+```{r}
+#Looking into what sites and stations comprise the dataset.
+
+sites <- c %>% 
+  group_by(site_id) %>% 
+  summarise(n_site = n())
+
+site_list <- sites$site_id
+
+#Looking into numbers of each filter type for each station - which stations collect size-fractionated samples?
+# c_long <- c %>% 
+#   select(work_area:date, chla_20um, chla_3_20um, chla_gff_3um:chla_bulk_gff) %>% 
+#   pivot_longer(cols = c(chla_20um:chla_bulk_gff), names_to = "filter_type",
+#                values_to = "chla")
+# 
+# n_filt <- c_long %>% 
+#   filter(is.na(chla)) %>% 
+#   group_by(site_id, filter_type) %>% 
+#   summarise(n_filt = n()) %>% 
+#   ungroup() %>% 
+#   pivot_wider(names_from = filter_type, values_from = n_filt) %>% 
+#   relocate(chla_bulk_gff, .after = chla_gff_3um)
+
+#List of surveys
+survey <- c %>% 
+  distinct(survey)
+
+#List of unique survey-station combinations 
+site_survey <- c %>% 
+  distinct(site_id, survey)
+
+#Nearshore stations
+ns <- c %>% 
+  filter(survey == "MACRO_MGEO" | survey == "MACRO_MGEO,KWAK" | 
+           survey == "MACRO_MGEO,QCS_V2" | survey == "QCS_V2,MACRO_MGEO")
+
+#Want to find the earliest and latest date in data-set. 
+date <- c %>% 
+  summarise(min_date = min(date),
+            max_date = max(date))
+
+```
+
+```{r}
+#From the portal download, selecting AV data and the stations from the erddap station list.
+c_p <- c_p %>% 
+  select(date, site_id, hakai_id, line_out_depth, collected, filter_type, 
+         chla_flag, chla_final, phaeo_flag) %>% 
+  filter(chla_flag == "AV" & phaeo_flag == "AV" & site_id %in% site_list)
+
+```
+
+
+
+```{r}
+#Things that have come up
+
+#1 - Nearshore and Johnstone Strait stations showing up - these have been removed from the erddap query
+#2 - Do we keep SF samples where concentrations are missing from a filter?
+
+```
+
+
+
+```{r}
+#Scatter looking at bulk chlorophyll versus size_fractionated sum
+c %>%
+  filter(!is.na(sf_sum)) %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum, fill = site_id)) + 
+  geom_point(pch = 21) +
+  xlim(0, 12) +
+  ylim(0, 12) +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QU39") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("QU39") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QU43") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("QU43") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "KC10") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("KC10") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "DFO2") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("DFO2") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "PRUTH") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("PRUTH") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QU38") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("QU38") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QU29") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("QU29") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "FZH01") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("FZH01") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "QCS01") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("QCS01") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "DFO5") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("DFO5") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "JS12") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("JS12") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "JS1") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("JS1") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "NBCH01") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("NBCH01") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "BU4") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("BU4") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "KN3") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("KN3") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "KWY01") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("KWY01") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "TO2") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("TO2") +
+  theme_bw()
+
+c %>%
+  filter(!is.na(sf_sum) & site_id == "TO5") %>% 
+  ggplot(aes(x = chla_bulk_gff, y = sf_sum)) + 
+  geom_point() +
+  xlim(0, 15) +
+  ylim(0, 15) +
+  ggtitle("TO5") +
+  theme_bw()
+```
+
+```{r}
+#I think that the clear outliers at PRUTH, QU38, QCS01 should be removed.
+#Need to think about the filter sets without all the filters. Why and why not remove?
+
+#I haven't really QC'd for whether a filter was switched or confused (i.e. is the concentration for 3-20um actually the concentration of GFF-3um and this made it through metadata checks?). This takes some more detailed analysis and knowledge of the system. This hasn't been done for many of the stations. Tricky, because wouldn't happen regularly, but should be considered for a "research" dataset, but is very hard to QC for. A bit of a herculean task here.   
+
+#Why
+#Samples should be used in conjunction with the set to look at size distribution
+#Hard to assess quality without the entire filter set
+#Why is one of the filters missing. Analysis issue - did this issue affect the other samples in the set? How do we know? Really tough to diagnose. Was there a filter missing in the stack? Did the filter just get lost (this would be the instance where it is OK to keep the other filters).
+
+#Why not
+#Assuming the issue was limited to the removed/missing filter, the other filters should be good.
+#Could still use the individual filter concentrations for wider scale analysis (i.e. was 3-20um Chl greater in one year versus others), although, would probably want to be consistent here and only use data where all three filter types are available.
+
+#Thoughts
+#I think the entire set should be removed when all three aren't present. I worry about user's misinterpreting the data and using 2 of 3 filters when they shouldn't be. 
+
+
+
+
+
+```
+
+
+```{r}
+#Looking at samples that don't have complete filter set - not going to work as don't have in long format
+
+c_long <- c %>% 
+  select(time, date, site_id, line_out_depth, `20um` = chla_20um, 
+         `3um` = chla_3_20um, `GF/F` = chla_gff_3um) %>% 
+  pivot_longer(cols = c(`20um`, `3um`, `GF/F`), 
+               names_to = "filter_type", values_to = "chla")
+
+c_filt_check <- c_long %>%
+  filter(!is.na(chla)) %>% 
+  group_by(time, site_id, line_out_depth) %>%
+  mutate(n_filt = n()) %>%
+  ungroup() %>% 
+  filter(n_filt < 3)
+
+cp_filt_check <- c_p %>% 
+  filter(!is.na(chla_final) & !filter_type == "Bulk GF/F") %>% 
+  group_by(collected, site_id, line_out_depth) %>%
+  mutate(n_filt = n()) %>%
+  ungroup() %>% 
+  filter(n_filt < 3)
+
+test_p <- cp_filt_check %>% 
+  select(date, site_id, filter_type, line_out_depth, hakai_id) %>% 
+  mutate(count_p = row_number())
+
+test_e <- c_filt_check %>% 
+  select(date, site_id, line_out_depth, filter_type)%>% 
+  mutate(count_e = row_number())
+
+
+
+test_e[ ,3] <- sapply(test_e[ ,3], as.numeric)
+
+m4 <- test_p %>% 
+  left_join(test_e)
+
+#This filter is not on erddap. Why?
+c_check <- c %>% 
+  filter(date == "2018-07-16" & site_id == "QU39" & line_out_depth == 20)
+
+#Why aren't these two matching up? AVC in phaeopigments maybe?
+#This brought the number down, but not equal
+
+#My join isn't doing what I want it too, but visual shows 2018-07-11 QU39 0m showing up in portal, but not on erddap - a day when only a GF/F is present. 
+
+#Need to figure this out tomorrow. 
+
+
+#It would actually be better to check this from a portal download as it will include the HakaiID numbers for QC. But, good to have both so I can ensure that they are giving the same output. 
+
+
+
+#Issue #1
+#2018-11-28T09:58:39Z, QU39 - duplicated values. I guess I need to contact Bryn. 
+
+#Issue #2
+
+
+
+```
+
+
+
+
+
+```{r}
+kc10 <- c %>% 
+  filter(site_id == "KC10") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+
+dfo2 <- c %>% 
+  filter(site_id == "DFO2") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+
+pruth <- c %>% 
+  filter(site_id == "PRUTH") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+
+qu38 <- c %>% 
+  filter(site_id == "QU38") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+
+qcs01 <- c %>% 
+  filter(site_id == "QCS01") %>% 
+  mutate(diff = chla_bulk_gff/sf_sum)
+```
+
