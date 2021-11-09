@@ -106,20 +106,48 @@ c_max <- c_bulk %>%
 c_max_n <- c_max %>% 
   group_by(site_id, line_out_depth) %>% 
   summarise(n_max = n()) %>% 
-  ungroup()
+  ungroup() %>% 
+  group_by(site_id) %>% 
+  mutate(sum = sum(n_max)) %>% 
+  ungroup() %>% 
+  mutate(max_perc = n_max/sum*100) %>% 
+  mutate_at(vars(max_perc), funs(round(., 0)))
+```
 
+
+```{r}
 #Trying to plot this out
-c_max_n %>% 
+f1 <- c_max_n %>% 
   ggplot(aes(x = site_id, y = n_max, fill = as.factor(line_out_depth))) +
-  geom_bar(stat = "identity", position = "dodge")
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = n_max), position = position_dodge(width = 0.9),
+            vjust = -0.25, size = 10) +
+  ggsci::scale_fill_npg(name = "Depth") +
+  ylim(0, 120) +
+  ylab("# Max Chl") +
+  theme_bw() +
+  theme(legend.position = c(0.06, 0.75),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 25))
 
+f2 <- c_max_n %>% 
+  ggplot(aes(x = site_id, y = max_perc, fill = as.factor(line_out_depth))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = max_perc), position = position_dodge(width = 0.9),
+            vjust = 0.5, hjust = -0.2, angle = 90, size = 10) +
+  ggsci::scale_fill_npg() +
+  ylim(0, 60) +
+  ylab("% Max Chl") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        text = element_text(size = 25))
 
+fig <- f1/f2
 
-
-
-
-
-
+ggsave(here("figures", "chl_max_dep.png"), fig,
+       width = 13, height = 12, dpi = 300)
 ```
 
 
@@ -128,15 +156,73 @@ c_max_n %>%
 c_dm %>% 
   filter(site_id == "QU39") %>% 
   ggplot(aes(x = date, y = log10(chla_dm), color = as.factor(line_out_depth))) +
-  geom_point() +
-  geom_line() +
-  facet_wrap(~ filter_type, ncol = 1) +
-  theme_bw() 
+  geom_point(size = 2) +
+  geom_line(size = 2) +
+  labs(y = "log10(Chl (ug/L))") +
+  ggsci::scale_color_npg(name = "Depth") +
+  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
+  theme_bw() +
+  theme(
+        axis.title.x = element_blank(),
+        text = element_text(size = 30))
   
 ggsave(here("figures", "QU39_timeseries_filter_type.png"),
-       width = 16, height = 12, dpi = 300)
+       width = 16, height = 14, dpi = 300)
+```
+```{r}
+c_dm %>% 
+  filter(site_id == "QU39") %>% 
+  ggplot(aes(x = date, y = perc, color = as.factor(line_out_depth))) +
+  geom_point(size = 2) +
+  geom_line(size = 2) +
+  labs(y = "% of total") +
+  ggsci::scale_color_npg(name = "Depth") +
+  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
+  theme_bw() +
+  theme(
+        axis.title.x = element_blank(),
+        text = element_text(size = 30))
+  
+ggsave(here("figures", "QU39_timeseries_filter_type_PERC.png"),
+       width = 16, height = 14, dpi = 300)
 ```
 
+
+
+```{r}
+c_dm %>% 
+  filter(site_id == "DFO2") %>% 
+  ggplot(aes(x = date, y = log10(chla_dm), color = as.factor(line_out_depth))) +
+  geom_point(size = 2) +
+  geom_line(size = 2) +
+  labs(y = "log10(Chl (ug/L))") +
+  ggsci::scale_color_npg(name = "Depth") +
+  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
+  theme_bw() +
+  theme(
+        axis.title.x = element_blank(),
+        text = element_text(size = 30))
+  
+ggsave(here("figures", "DFO2_timeseries_filter_type.png"),
+       width = 16, height = 14, dpi = 300)
+```
+```{r}
+c_dm %>% 
+  filter(site_id == "KC10" & date > "2017-01-01") %>% 
+  ggplot(aes(x = date, y = log10(chla_dm), color = as.factor(line_out_depth))) +
+  geom_point(size = 2) +
+  geom_line(size = 2) +
+  labs(y = "log10(Chl (ug/L))") +
+  ggsci::scale_color_npg(name = "Depth") +
+  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
+  theme_bw() +
+  theme(
+        axis.title.x = element_blank(),
+        text = element_text(size = 30))
+  
+ggsave(here("figures", "KC10_timeseries_filter_type.png"),
+       width = 16, height = 14, dpi = 300)
+```
 
 ```{r}
 cl_c %>% 
