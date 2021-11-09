@@ -34,10 +34,6 @@ c <- c %>%
 c_qc <- c %>% 
   filter(!is.na(chla) & (chla_flag == "AV" | chla_flag == "ADL" | is.na(chla_flag)))
 
-#Removing bulk data
-c_qc <- c_qc %>% 
-  filter(!filter_type == "Bulk GF/F")
-
 #Removing exact duplicates -  not replicates. Not sure why these are happening
 c_qc <- c_qc %>% 
   group_by(date, site_id, line_out_depth, filter_type) %>% 
@@ -53,6 +49,16 @@ c_dm <- c_qc %>%
   ungroup() %>% 
   mutate_at(vars(chla_dm, chla_sdev), funs(round(., 2)))
 
+#Separating Bulk data
+c_bulk <- c_dm %>% 
+  filter(filter_type == "Bulk GF/F")
+
+
+#Removing bulk data
+c_dm <- c_dm %>% 
+  filter(!filter_type == "Bulk GF/F")
+
+
 
 #Pivoting to calculate size-fractionated sum
 c_wide <- c_dm %>%
@@ -64,25 +70,56 @@ c_wide <- c_dm %>%
 # %>% 
 #   select(date:line_out_depth, sum)
 
-#Bringing sum into long format (did it this way as accross column sum will throw NA is not all filters present). Then, calculating the percent size fraction.
+#Bringing sum into long format (did it this way as across column sum will throw NA if not all filters present). Then, calculating the percent size fraction.
+
+#Joining sum to long format
 c_dm <- c_dm %>% 
   left_join(c_wide) %>% 
   filter(!is.na(sum)) 
 
+#Calculating percent contribution for each filter type and limiting decimal place to 2
 c_dm <- c_dm %>% 
   mutate(perc = chla_dm/sum) %>% 
   mutate_at(vars(perc), funs(round(., 2)))
 
+#Pivoting concentrations wider to plot as scatter
 cl_c <- c_dm %>%
   select(date:chla_dm) %>% 
   pivot_wider(names_from = line_out_depth, values_from = chla_dm) %>% 
   rename(m0 = `0`, m5 = `5`, m1 = `1`, m10 = `10`, m20 = `20`, m30 = `30`)
 
+#Pivoting percentages wider to plot as scatter
 cl_p <- c_dm %>%
   select(date:filter_type, perc) %>% 
   pivot_wider(names_from = line_out_depth, values_from = perc) %>% 
   rename(m0 = `0`, m5 = `5`, m1 = `1`, m10 = `10`, m20 = `20`, m30 = `30`)
   
+```
+```{r}
+#Looking at what sampling depth usually had the peak in chlorophyll biomass.
+c_max <- c_bulk %>% 
+  group_by(date, site_id) %>% 
+  slice_max(chla_dm) %>% 
+  ungroup()
+
+#Summarizing the number of times each depth was the max depth for each station
+c_max_n <- c_max %>% 
+  group_by(site_id, line_out_depth) %>% 
+  summarise(n_max = n()) %>% 
+  ungroup()
+
+#Trying to plot this out
+c_max_n %>% 
+  ggplot(aes(x = site_id, y = n_max, fill = as.factor(line_out_depth))) +
+  geom_bar(stat = "identity", position = "dodge")
+
+
+
+
+
+
+
+
 ```
 
 
