@@ -60,8 +60,6 @@ c_bulk <- c_dm %>%
 c_dm <- c_dm %>% 
   filter(!filter_type == "Bulk GF/F")
 
-
-
 #Pivoting to calculate size-fractionated sum
 c_wide <- c_dm %>%
   select(date:chla_dm) %>% 
@@ -97,6 +95,7 @@ cl_p <- c_dm %>%
   rename(m0 = `0`, m5 = `5`, m1 = `1`, m10 = `10`, m20 = `20`, m30 = `30`)
   
 ```
+
 ```{r}
 #Looking at what sampling depth usually had the peak in chlorophyll biomass.
 c_max <- c_bulk %>% 
@@ -114,6 +113,22 @@ c_max_n <- c_max %>%
   ungroup() %>% 
   mutate(max_perc = n_max/sum*100) %>% 
   mutate_at(vars(max_perc), funs(round(., 0)))
+```
+```{r}
+#Want to look at how similar 0 and 5m depth are biomass wise.
+
+c_bulk_wide <- c_bulk %>%
+  select(date:line_out_depth, chla_dm) %>% 
+  pivot_wider(names_from = line_out_depth, values_from = chla_dm) 
+
+c_bulk_wide %>% 
+  ggplot(aes(x = `0`, y = `5`)) +
+  geom_point(pch = 21) +
+  facet_grid(~ site_id) +
+  xlim(0, 30) +
+  ylim(0, 30)
+
+
 ```
 
 
