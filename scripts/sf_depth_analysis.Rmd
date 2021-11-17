@@ -13,6 +13,7 @@ library(here)
 library(patchwork)
 library(ggcorrplot)
 library(vegan)
+library(ggpubr)
 
 ```
 
@@ -114,23 +115,6 @@ c_max_n <- c_max %>%
   mutate(max_perc = n_max/sum*100) %>% 
   mutate_at(vars(max_perc), funs(round(., 0)))
 ```
-```{r}
-#Want to look at how similar 0 and 5m depth are biomass wise.
-
-c_bulk_wide <- c_bulk %>%
-  select(date:line_out_depth, chla_dm) %>% 
-  pivot_wider(names_from = line_out_depth, values_from = chla_dm) 
-
-c_bulk_wide %>% 
-  ggplot(aes(x = `0`, y = `5`)) +
-  geom_point(pch = 21) +
-  facet_grid(~ site_id) +
-  xlim(0, 30) +
-  ylim(0, 30)
-
-
-```
-
 
 ```{r}
 #Trying to plot this out
@@ -166,7 +150,40 @@ fig <- f1/f2
 ggsave(here("figs_invent", "chl_max_dep.png"), fig,
        width = 13, height = 12, dpi = 300)
 ```
+```{r}
+#Want to look at how similar 0 and 5m depth are biomass wise.
 
+c_bulk_wide <- c_bulk %>%
+  select(date:line_out_depth, chla_dm) %>% 
+  pivot_wider(names_from = line_out_depth, values_from = chla_dm) 
+
+c_bulk_wide <- c_bulk_wide %>% 
+  rename(m0 = `0`, m5 = `5`, m10 = `10`, m20 = `20`, m30 = `30`)
+
+c_bulk_high <- c_bulk %>%
+  filter(chla_dm > 100)
+
+c_bulk_wide <- c_bulk_wide %>% 
+  filter(m0 < 100 & m5 < 100)
+
+ggscatter(c_bulk_wide, x = "m0", y = "m5", fill = "site_id", palette = "npg",
+          add = "reg.line", size = 4, shape = 21) +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~ site_id) +
+  xlim(0, 20) +
+  ylim(0, 20) +
+  stat_cor(label.y = 19.5, size = 10) +
+  stat_regline_equation(label.y = 17, size = 10) +
+  xlab("Chla (0m, ug/L)") +
+  ylab("Chla (5m, ug/L)") +
+  theme_bw() + 
+  theme(legend.position = "none",
+        text = element_text(size = 30))
+
+ggsave(here("figs_invent", "chl_bulk_0_5_scatter.png"), 
+       width = 16, height = 6, dpi = 300)
+
+```
 
 
 ```{r}
