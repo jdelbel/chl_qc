@@ -3,8 +3,6 @@ title: "R Notebook"
 output: html_notebook
 ---
 
-
-
 ```{r}
 #Load packages
 library(tidyverse)  
@@ -104,6 +102,19 @@ c_max <- c_bulk %>%
   slice_max(chla_dm) %>% 
   ungroup()
 
+#Selecting the dates with deep chl max to see what the composition was like
+c_max_gt20 <- c_max %>% 
+  filter(line_out_depth >= 20 & line_out_depth <= 30)
+
+deep_max_qu39 <- c_max_gt20 %>% 
+  filter(site_id == "QU39")
+
+deep_max_qu39_list <- deep_max_qu39$date
+
+deep_max_qu39_data <- c_dm %>% 
+  filter(site_id == "QU39") %>% 
+  filter(date %in% deep_max_qu39_list)
+
 #Summarizing the number of times each depth was the max depth for each station
 c_max_n <- c_max %>% 
   group_by(site_id, line_out_depth) %>% 
@@ -174,13 +185,46 @@ ggscatter(c_bulk_wide, x = "m0", y = "m5", fill = "site_id", palette = "npg",
   ylim(0, 20) +
   stat_cor(label.y = 19.5, size = 10) +
   stat_regline_equation(label.y = 17, size = 10) +
-  xlab("Chla (0m, ug/L)") +
-  ylab("Chla (5m, ug/L)") +
+  xlab("chl (0m, ug/L)") +
+  ylab("chl (5m, ug/L)") +
   theme_bw() + 
   theme(legend.position = "none",
         text = element_text(size = 30))
 
 ggsave(here("figs_invent", "chl_bulk_0_5_scatter.png"), 
+       width = 16, height = 6, dpi = 300)
+
+```
+```{r}
+#Trying to look at comparability of bulk and SF
+c_bulk_join <- c_bulk %>% 
+  select(date, site_id, line_out_depth, bulk_dm = chla_dm)
+
+c_dm_join <- c_dm %>% 
+  select(date, site_id, line_out_depth, sum) %>% 
+  distinct(date, site_id, line_out_depth, sum)
+
+c_bulk_sf <- c_bulk_join %>% 
+  left_join(c_dm_join)
+
+c_bulk_sf <- c_bulk_sf %>% 
+  filter(bulk_dm < 100 & sum < 100)
+
+ggscatter(c_bulk_sf, x = "bulk_dm", y = "sum", fill = "site_id", palette = "npg",
+          add = "reg.line", size = 4, shape = 21) +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~ site_id) +
+  xlim(0, 30) +
+  ylim(0, 30) +
+  stat_cor(label.y = 29.5, size = 10) +
+  stat_regline_equation(label.y = 27, size = 10) +
+  xlab("chl (bulk, ug/L)") +
+  ylab("chl (SF-Sum, ug/L)") +
+  theme_bw() + 
+  theme(legend.position = "none",
+        text = element_text(size = 30))
+
+ggsave(here("figs_invent", "chl_bulk_sfsum.png"), 
        width = 16, height = 6, dpi = 300)
 
 ```
@@ -314,7 +358,7 @@ f1 <- ggcorrplot(corr_q_20, outline.color = "white", lab = TRUE, type = "lower",
            p.mat = p.mat_q_20, lab_size = 10) +
   scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
                       high =  "red") +
-  ggtitle("20um") +
+  ggtitle(">20.0um") +
   annotate("text", x = 1, y = 4.3, label = "QU39", size = 10) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
@@ -338,7 +382,7 @@ f2 <- ggcorrplot(corr_q_3, outline.color = "white", lab = TRUE, type = "lower",
            p.mat = p.mat_q_3, lab_size = 10) +
   scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
                       high =  "red") +
-  ggtitle("3um") +
+  ggtitle("3.0-20.0um") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         axis.title.x = element_blank(),
@@ -362,7 +406,7 @@ f3 <- ggcorrplot(corr_q_g, outline.color = "white", lab = TRUE, type = "lower",
            p.mat = p.mat_q_g, lab_size = 10) +
   scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
                       high =  "red") +
-  ggtitle("GF/F") +
+  ggtitle("0.7-3.0um") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         axis.title.x = element_blank(),
@@ -576,12 +620,12 @@ data.scores_k$depth = nk$line_out_depth
 ```{r}
 #Plotting nMDS - commented sections are for if I want to add environmental fits.
 
-ggplot(data = data.scores_k, aes(x = NMDS1, y = NMDS2)) + 
-  geom_point(data = data.scores_k, aes(fill = as.factor(month), shape = as.factor(depth)),
-             size = 4) + 
+ggplot(data = data.scores_rel, aes(x = NMDS1, y = NMDS2)) + 
+  geom_point(data = data.scores_rel, aes(fill = as.factor(depth)),
+             size = 4, pch = 21) + 
   scale_fill_brewer(palette = "RdYlBu") +
   # scale_fill_manual(values = c("blue", "springgreen4", "black", "magenta")) + 
-  scale_shape_manual(values = c(21, 22, 23, 24, 25)) + 
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) + 
   # geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2), 
   #              data = en_coord_cont, size = 1, alpha = 0.5, colour = "grey30") +
   # geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
