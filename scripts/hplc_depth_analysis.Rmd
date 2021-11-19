@@ -54,7 +54,33 @@ qu39_2020_20 <- read_xls(here("files", "2020_20m.xls"),
 qu39 <- rbind(qu39_2019_0, qu39_2019_5, qu39_2019_10, qu39_2019_20, 
               qu39_2020_0, qu39_2020_5, qu39_2020_10, qu39_2020_20 
               )
+```
 
+
+```{r}
+#Download Chlorophyll data.
+ 
+chl <- read_csv(here("files", "qu39_kc10_dfo2_depth.csv"))
+
+#Limiting to pertinent columns
+chl <- chl %>% 
+  select(date, collected, work_area, survey, site_id, line_out_depth,
+         filter_type, chla, chla_flag)
+
+#Adding year column
+chl <- chl %>% 
+  mutate(year = lubridate::year(date),
+         month = lubridate::month(date))
+
+#Only including AV and unflagged data
+chl_qc <- chl %>% 
+  filter(!is.na(chla) & (chla_flag == "AV" | chla_flag == "ADL" | is.na(chla_flag)))
+
+#Removing exact duplicates -  not replicates. Not sure why these are happening
+chl_qc <- chl_qc %>% 
+  group_by(date, site_id, line_out_depth, filter_type) %>% 
+  distinct(.keep_all = TRUE) %>% 
+  ungroup()
 ```
 
 ```{r}
@@ -65,10 +91,10 @@ qu39$Date <- as.Date(qu39$Date, "%Y-%m-%d")
 #Renaming columns
 qu39 <- select(qu39,
                date = Date, site_id = Station,
-               depth, cyan = Cyanobacteria, hapto = Hapto,
-               green = `Prasinophytes-3`, cryp = Cryptophytes,
-               dino = `Dinoflagellates-1`, dict = Dictyo,
-               diat = `Diatoms-1`)
+               depth, Cyan = Cyanobacteria, Hapt = Hapto,
+               Chlo = `Prasinophytes-3`, Cryp = Cryptophytes,
+               Dino = `Dinoflagellates-1`, Dict = Dictyo,
+               Diat = `Diatoms-1`)
 
 ```
 
@@ -76,7 +102,7 @@ qu39 <- select(qu39,
 
 #Pivot Longer - this also calculates the daily mean for a triplcate that was collected.
 qu39_tidy <- qu39 %>% 
-  pivot_longer(c(cyan, hapto, green, cryp, dino, dict, diat),
+  pivot_longer(c(Cyan, Hapt, Chlo, Cryp, Dino, Dict, Diat),
                  names_to = "phyto_group", values_to = "TChla") %>% 
   group_by(date, site_id, depth, phyto_group) %>% 
   summarize(TChla_mean = mean(TChla)) %>% 
@@ -91,6 +117,22 @@ qu39_tidy <- qu39_tidy %>%
   mutate_at(vars(perc), funs(round(., 2)))
 
 ```
+
+```{r}
+#Order phytoplankton groups roughly from smallest to largest - create order list
+order_chem <- c("Cyan", "Hapt", "Chlo", "Cryp",
+                   "Dino", "Raph", "Dict", "Diat")
+
+#Chemtax - Specify order of phyto groups for figures
+qu39_tidy <- arrange(mutate(qu39_tidy,
+                                phyto_group = factor(phyto_group,
+                                levels = order_chem)))
+
+qu39_tidy <- qu39_tidy %>% 
+  arrange(date, depth, phyto_group)
+```
+
+
 
 ```{r}
 #pivoting long data where daily mean was calculated wider
