@@ -1,0 +1,409 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+#Load packages
+library(tidyverse)  
+library(readxl)
+library(here)
+library(patchwork)
+library(ggcorrplot)
+library(vegan)
+library(ggpubr)
+
+```
+
+```{r}
+#Importing chemtax data from different depths - I need to look into Chemtax and how to run these as different groups in a single sheet. I should do a test to see if they are the same.
+
+qu39_2019_0 <- read_xls(here("files", "2019_0m.xls"),
+                 sheet = "DataSummaryR1_3",
+                 range = "E259:Q299")
+
+qu39_2019_5 <- read_xls(here("files", "2019_5m.xls"),
+                 sheet = "DataSummaryR1_3",
+                 range = "E271:Q313")
+
+qu39_2019_10 <- read_xls(here("files", "2019_10m.xls"),
+                 sheet = "DataSummaryR1_3",
+                 range = "E253:Q292")
+
+qu39_2019_20 <- read_xls(here("files", "2019_20m.xls"),
+                 sheet = "DataSummaryR1_3",
+                 range = "E145:Q166")
+
+qu39_2020_0 <- read_xls(here("files", "2020_0m.xls"),
+                 sheet = "DataSummaryR1_3",
+                 range = "E253:Q292")
+
+qu39_2020_5 <- read_xls(here("files", "2020_5m.xls"),
+                 sheet = "DataSummaryR1_3",
+                 range = "E253:Q292")
+
+qu39_2020_10 <- read_xls(here("files", "2020_10m.xls"),
+                 sheet = "DataSummaryR1_3",
+                 range = "E253:Q292")
+
+qu39_2020_20 <- read_xls(here("files", "2020_20m.xls"),
+                 sheet = "DataSummaryR1_3",
+                 range = "E145:Q166")
+
+#Bringing data together into single dataframe
+qu39 <- rbind(qu39_2019_0, qu39_2019_5, qu39_2019_10, qu39_2019_20, 
+              qu39_2020_0, qu39_2020_5, qu39_2020_10, qu39_2020_20 
+              )
+
+```
+
+```{r}
+#Setting data format
+qu39$Date <- as.Date(qu39$Date, "%Y-%m-%d")
+```
+```{r}
+#Renaming columns
+qu39 <- select(qu39,
+               date = Date, site_id = Station,
+               depth, cyan = Cyanobacteria, hapto = Hapto,
+               green = `Prasinophytes-3`, cryp = Cryptophytes,
+               dino = `Dinoflagellates-1`, dict = Dictyo,
+               diat = `Diatoms-1`)
+
+```
+
+```{r}
+
+#Pivot Longer - this also calculates the daily mean for a triplcate that was collected.
+qu39_tidy <- qu39 %>% 
+  pivot_longer(c(cyan, hapto, green, cryp, dino, dict, diat),
+                 names_to = "phyto_group", values_to = "TChla") %>% 
+  group_by(date, site_id, depth, phyto_group) %>% 
+  summarize(TChla_mean = mean(TChla)) %>% 
+  ungroup() %>% 
+  group_by(date, site_id, depth) %>% 
+  mutate(TChla_sum = sum(TChla_mean)) %>% 
+  ungroup()
+
+#Calculate percent contribution
+qu39_tidy <- qu39_tidy %>% 
+  mutate(perc = TChla_mean/TChla_sum) %>% 
+  mutate_at(vars(perc), funs(round(., 2)))
+
+```
+
+```{r}
+#pivoting long data where daily mean was calculated wider
+qu39_wide <- qu39_tidy %>%
+  select(date:TChla_mean) %>% 
+  pivot_wider(names_from = depth, values_from = TChla_mean)
+
+qu39_wide_p <- qu39_tidy %>%
+  select(date:phyto_group, perc) %>% 
+  pivot_wider(names_from = depth, values_from = perc)
+
+```
+
+```{r}
+qu39_tidy %>% 
+  ggplot(aes(x = date, y = log10(TChla_mean), color = as.factor(depth))) +
+  geom_point(size = 2) +
+  geom_line(size = 2) +
+  labs(y = "log10(TChla (ug/L))") +
+  ggtitle("QU39") +
+  ggsci::scale_color_npg(name = "Depth") +
+  facet_wrap(~ phyto_group, ncol = 1, scales = "free_y") +
+  theme_bw() +
+  theme(
+        axis.title.x = element_blank(),
+        text = element_text(size = 30))
+  
+ggsave(here("figs_invent", "HPLC_TS_QU39_filt-type_CONC.png"),
+       width = 16, height = 14, dpi = 300)
+```
+```{r}
+qu39_tidy %>% 
+  ggplot(aes(x = date, y = perc, color = as.factor(depth))) +
+  geom_point(size = 2) +
+  geom_line(size = 2) +
+  labs(y = "Relative Contribution (%)") +
+  ggtitle("QU39") +
+  ggsci::scale_color_npg(name = "Depth") +
+  facet_wrap(~ phyto_group, ncol = 1, scales = "free_y") +
+  theme_bw() +
+  theme(
+        axis.title.x = element_blank(),
+        text = element_text(size = 30))
+  
+ggsave(here("figs_invent", "HPLC_TS_QU39_filt-type_PERC.png"),
+       width = 16, height = 14, dpi = 300)
+```
+
+```{r}
+#Correlation matrix for each phyto group and depth
+
+cyan <- qu39_wide_p %>% 
+  filter(phyto_group == "cyan") %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
+  drop_na()
+
+corr_cyan <- round(cor(cyan), 1)
+
+p.mat_cyan <- cor_pmat(cyan)
+head(p.mat_cyan[, 1:4])
+
+f1 <- ggcorrplot(corr_cyan, outline.color = "white", lab = TRUE, type = "lower", 
+           p.mat = p.mat_cyan, lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
+                      high =  "red") +
+  annotate("text", x = 2, y = 3.4, label = "Cyan", size = 12) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = c(0.15, 0.75),
+        text = element_text(size = 30))
+
+hapt <- qu39_wide_p %>% 
+  filter(phyto_group == "hapto") %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
+  drop_na()
+
+corr_hapt <- round(cor(hapt), 1)
+
+p.mat_hapt <- cor_pmat(hapt)
+head(p.mat_hapt[, 1:4])
+
+f2 <- ggcorrplot(corr_hapt, outline.color = "white", lab = TRUE, type = "lower", 
+           p.mat = p.mat_hapt, lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
+                      high =  "red") +
+  annotate("text", x = 2, y = 3.4, label = "Hapt", size = 12) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "none",
+        text = element_text(size = 30))
+
+green <- qu39_wide_p %>% 
+  filter(phyto_group == "green") %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
+  drop_na()
+
+corr_green <- round(cor(green), 1)
+
+p.mat_green <- cor_pmat(green)
+head(p.mat_green[, 1:4])
+
+f3 <- ggcorrplot(corr_green, outline.color = "white", lab = TRUE, type = "lower", 
+           p.mat = p.mat_green, lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
+                      high =  "red") +
+  annotate("text", x = 2, y = 3.4, label = "Green", size = 12) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "none",
+        text = element_text(size = 30))
+
+cryp <- qu39_wide_p %>% 
+  filter(phyto_group == "cryp") %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
+  drop_na()
+
+corr_cryp <- round(cor(cryp), 1)
+
+p.mat_cryp <- cor_pmat(cryp)
+head(p.mat_cryp[, 1:4])
+
+f4 <- ggcorrplot(corr_cryp, outline.color = "white", lab = TRUE, type = "lower", 
+           p.mat = p.mat_cryp, lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
+                      high =  "red") +
+  annotate("text", x = 2, y = 3.4, label = "Cryp", size = 12) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "none",
+        text = element_text(size = 30))
+
+dino <- qu39_wide_p %>% 
+  filter(phyto_group == "dino") %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
+  drop_na()
+
+corr_dino <- round(cor(dino), 1)
+
+p.mat_dino <- cor_pmat(dino)
+head(p.mat_dino[, 1:4])
+
+#Need to set this one blank for no correlation
+f5 <- ggcorrplot(corr_dino, outline.color = "white", lab = TRUE, type = "lower", 
+           p.mat = p.mat_dino, insig = "blank", lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
+                      high =  "red") +
+  theme_bw() +
+  annotate("text", x = 2, y = 3.4, label = "Dino", size = 12) +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "none",
+        text = element_text(size = 30))
+
+dict <- qu39_wide_p %>% 
+  filter(phyto_group == "dict") %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
+  drop_na()
+
+corr_dict <- round(cor(dict), 1)
+
+p.mat_dict <- cor_pmat(dict)
+head(p.mat_dict[, 1:4])
+
+f6 <- ggcorrplot(corr_dict, outline.color = "white", lab = TRUE, type = "lower", 
+           p.mat = p.mat_dict, lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
+                      high =  "red") +
+  theme_bw() +
+  annotate("text", x = 2, y = 3.4, label = "Dict", size = 12) +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "none",
+        text = element_text(size = 30))
+
+diat <- qu39_wide_p %>% 
+  filter(phyto_group == "diat") %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
+  drop_na()
+
+corr_diat <- round(cor(diat), 1)
+
+p.mat_diat <- cor_pmat(diat)
+head(p.mat_diat[, 1:4])
+
+f7 <- ggcorrplot(corr_diat, outline.color = "white", lab = TRUE, type = "lower", 
+           p.mat = p.mat_diat, insig = "blank", lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
+                      high =  "red") +
+  annotate("text", x = 2, y = 3.4, label = "Diat", size = 12) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "none",
+        text = element_text(size = 30))
+
+
+
+fig <- (f1 + f2 + f3 + f4 + f5 + f6 + f7 + plot_layout(ncol = 3))
+
+ggsave(here("figs_invent", "hplc_correlation_test.png"),
+       width = 16, height = 16, dpi = 300)
+```
+
+```{r}
+#Working on nmds
+# c_nmds <- c_dm %>%
+#   select(date:chla_dm) %>% 
+#   pivot_wider(names_from = filter_type, values_from = chla_dm)
+# 
+# #Arranging according to site ID and date
+# c_nmds <- c_nmds %>% 
+#   mutate(month = lubridate::month(date)) %>% 
+#   arrange(site_id, date) %>% 
+#   relocate(month, .after = date)
+# 
+# nq <- c_nmds %>% 
+#   filter(site_id == "QU39")
+# 
+# nk <- c_nmds %>% 
+#   filter(site_id == "KC10" & `3um` > 0)  
+# 
+# nq_conc <- nq[, 5:ncol(nq)]
+# 
+# nk_conc <- nk[, 5:ncol(nk)]
+# 
+# nq_rel <- decostand(nq_conc, method = "total")
+# 
+# nq_conc_t <- log10(nq_conc + 1)
+# 
+# nk_conc_t <- log10(nk_conc + 1)
+# 
+# nq_rel_t <- sqrt(nq_rel)
+
+```
+
+```{r}
+# nq_nmds <-  metaMDS(nq_conc_t, distance = "bray", autotransform = FALSE,
+#                          k = 2, trymax = 100) 
+# 
+# 
+# 
+# nq_nmds_rel <-  metaMDS(nq_rel_t, distance = "bray", autotransform = FALSE,
+#                          k = 2, trymax = 100) 
+# 
+# nk_nmds <-  metaMDS(nk_conc_t, distance = "bray", autotransform = FALSE,
+#                          k = 2, trymax = 100) 
+# 
+# nq_nmds #0.08 - Good
+# nq_nmds_rel
+# nk_nmds
+# 
+# stressplot(nq_nmds)
+```
+```{r}
+# data.scores = as.data.frame(scores(nq_nmds))
+# data.scores$month = nq$month
+# data.scores$depth = nq$line_out_depth
+# 
+# data.scores_rel = as.data.frame(scores(nq_nmds_rel))
+# data.scores_rel$month = nq$month
+# data.scores_rel$depth = nq$line_out_depth
+# 
+# data.scores_k = as.data.frame(scores(nk_nmds))
+# data.scores_k$month = nk$month
+# data.scores_k$depth = nk$line_out_depth
+```
+
+```{r}
+#Plotting nMDS - commented sections are for if I want to add environmental fits.
+
+# ggplot(data = data.scores_rel, aes(x = NMDS1, y = NMDS2)) + 
+#   geom_point(data = data.scores_rel, aes(fill = as.factor(depth)),
+#              size = 4, pch = 21) + 
+#   scale_fill_brewer(palette = "RdYlBu") +
+#   # scale_fill_manual(values = c("blue", "springgreen4", "black", "magenta")) + 
+#   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) + 
+#   # geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2), 
+#   #              data = en_coord_cont, size = 1, alpha = 0.5, colour = "grey30") +
+#   # geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
+#   #           fontface = "bold", label = row.names(en_coord_cont)) + 
+#   # xlim(-0.5, 1.8) +
+#   theme(axis.title = element_text(size = 10, face = "bold", colour = "black"),
+#         panel.background = element_blank(),
+#         panel.border = element_rect(fill = NA, colour = "black"), 
+#         axis.ticks = element_blank(),
+#         axis.text = element_blank(),
+#         legend.key = element_blank(), 
+#         legend.title = element_text(size = 10, face = "bold", colour = "black"), 
+#         legend.text = element_text(size = 9, colour = "black"),
+#         legend.position = c(0.92, 0.6),
+#         legend.margin = margin(-0.3,0,0,0, unit = "cm"),
+#         text = element_text(size = 30)) +
+#   labs(fill = "Month", shape = "Station") +
+#   guides(fill = guide_legend(override.aes = list(shape = 21)))
+
+# ggsave(here("figures_new", "nmds_micro_absolute_photo.png"),
+#        width = 6, height = 4.5, dpi = 300)
+```
+
+
+

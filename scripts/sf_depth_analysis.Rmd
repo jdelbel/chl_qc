@@ -81,6 +81,10 @@ c_dm <- c_dm %>%
   mutate(perc = chla_dm/sum) %>% 
   mutate_at(vars(perc), funs(round(., 2)))
 
+#Removing unflagged day from KC10 where there is clearly bad data.
+c_dm <- c_dm %>% 
+  filter(!(site_id == "KC10" & date == "2021-08-05"))
+
 #Pivoting concentrations wider to plot as scatter
 cl_c <- c_dm %>%
   select(date:chla_dm) %>% 
@@ -555,106 +559,99 @@ ggsave(here("figs_invent", "correlation_test.png"),
 
 ```{r}
 #Working on nmds
-c_nmds <- c_dm %>%
-  select(date:chla_dm) %>% 
-  pivot_wider(names_from = filter_type, values_from = chla_dm)
-
-#Arranging according to site ID and date
-c_nmds <- c_nmds %>% 
-  mutate(month = lubridate::month(date)) %>% 
-  arrange(site_id, date) %>% 
-  relocate(month, .after = date)
-
-nq <- c_nmds %>% 
-  filter(site_id == "QU39")
-
-nk <- c_nmds %>% 
-  filter(site_id == "KC10" & `3um` > 0)  
-
-nq_conc <- nq[, 5:ncol(nq)]
-
-nk_conc <- nk[, 5:ncol(nk)]
-
-nq_rel <- decostand(nq_conc, method = "total")
-
-nq_conc_t <- log10(nq_conc + 1)
-
-nk_conc_t <- log10(nk_conc + 1)
-
-nq_rel_t <- sqrt(nq_rel)
+# c_nmds <- c_dm %>%
+#   select(date:chla_dm) %>% 
+#   pivot_wider(names_from = filter_type, values_from = chla_dm)
+# 
+# #Arranging according to site ID and date
+# c_nmds <- c_nmds %>% 
+#   mutate(month = lubridate::month(date)) %>% 
+#   arrange(site_id, date) %>% 
+#   relocate(month, .after = date)
+# 
+# nq <- c_nmds %>% 
+#   filter(site_id == "QU39")
+# 
+# nk <- c_nmds %>% 
+#   filter(site_id == "KC10" & `3um` > 0)  
+# 
+# nq_conc <- nq[, 5:ncol(nq)]
+# 
+# nk_conc <- nk[, 5:ncol(nk)]
+# 
+# nq_rel <- decostand(nq_conc, method = "total")
+# 
+# nq_conc_t <- log10(nq_conc + 1)
+# 
+# nk_conc_t <- log10(nk_conc + 1)
+# 
+# nq_rel_t <- sqrt(nq_rel)
 
 ```
 
 ```{r}
-nq_nmds <-  metaMDS(nq_conc_t, distance = "bray", autotransform = FALSE,
-                         k = 2, trymax = 100) 
-
-
-
-nq_nmds_rel <-  metaMDS(nq_rel_t, distance = "bray", autotransform = FALSE,
-                         k = 2, trymax = 100) 
-
-nk_nmds <-  metaMDS(nk_conc_t, distance = "bray", autotransform = FALSE,
-                         k = 2, trymax = 100) 
-
-nq_nmds #0.08 - Good
-nq_nmds_rel
-nk_nmds
-
-stressplot(nq_nmds)
+# nq_nmds <-  metaMDS(nq_conc_t, distance = "bray", autotransform = FALSE,
+#                          k = 2, trymax = 100) 
+# 
+# 
+# 
+# nq_nmds_rel <-  metaMDS(nq_rel_t, distance = "bray", autotransform = FALSE,
+#                          k = 2, trymax = 100) 
+# 
+# nk_nmds <-  metaMDS(nk_conc_t, distance = "bray", autotransform = FALSE,
+#                          k = 2, trymax = 100) 
+# 
+# nq_nmds #0.08 - Good
+# nq_nmds_rel
+# nk_nmds
+# 
+# stressplot(nq_nmds)
 ```
 ```{r}
-data.scores = as.data.frame(scores(nq_nmds))
-data.scores$month = nq$month
-data.scores$depth = nq$line_out_depth
-
-data.scores_rel = as.data.frame(scores(nq_nmds_rel))
-data.scores_rel$month = nq$month
-data.scores_rel$depth = nq$line_out_depth
-
-data.scores_k = as.data.frame(scores(nk_nmds))
-data.scores_k$month = nk$month
-data.scores_k$depth = nk$line_out_depth
+# data.scores = as.data.frame(scores(nq_nmds))
+# data.scores$month = nq$month
+# data.scores$depth = nq$line_out_depth
+# 
+# data.scores_rel = as.data.frame(scores(nq_nmds_rel))
+# data.scores_rel$month = nq$month
+# data.scores_rel$depth = nq$line_out_depth
+# 
+# data.scores_k = as.data.frame(scores(nk_nmds))
+# data.scores_k$month = nk$month
+# data.scores_k$depth = nk$line_out_depth
 ```
 
 ```{r}
 #Plotting nMDS - commented sections are for if I want to add environmental fits.
 
-ggplot(data = data.scores_rel, aes(x = NMDS1, y = NMDS2)) + 
-  geom_point(data = data.scores_rel, aes(fill = as.factor(depth)),
-             size = 4, pch = 21) + 
-  scale_fill_brewer(palette = "RdYlBu") +
-  # scale_fill_manual(values = c("blue", "springgreen4", "black", "magenta")) + 
-  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) + 
-  # geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2), 
-  #              data = en_coord_cont, size = 1, alpha = 0.5, colour = "grey30") +
-  # geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
-  #           fontface = "bold", label = row.names(en_coord_cont)) + 
-  # xlim(-0.5, 1.8) +
-  theme(axis.title = element_text(size = 10, face = "bold", colour = "black"),
-        panel.background = element_blank(),
-        panel.border = element_rect(fill = NA, colour = "black"), 
-        axis.ticks = element_blank(),
-        axis.text = element_blank(),
-        legend.key = element_blank(), 
-        legend.title = element_text(size = 10, face = "bold", colour = "black"), 
-        legend.text = element_text(size = 9, colour = "black"),
-        legend.position = c(0.92, 0.6),
-        legend.margin = margin(-0.3,0,0,0, unit = "cm"),
-        text = element_text(size = 30)) +
-  labs(fill = "Month", shape = "Station") +
-  guides(fill = guide_legend(override.aes = list(shape = 21)))
+# ggplot(data = data.scores_rel, aes(x = NMDS1, y = NMDS2)) + 
+#   geom_point(data = data.scores_rel, aes(fill = as.factor(depth)),
+#              size = 4, pch = 21) + 
+#   scale_fill_brewer(palette = "RdYlBu") +
+#   # scale_fill_manual(values = c("blue", "springgreen4", "black", "magenta")) + 
+#   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) + 
+#   # geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2), 
+#   #              data = en_coord_cont, size = 1, alpha = 0.5, colour = "grey30") +
+#   # geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
+#   #           fontface = "bold", label = row.names(en_coord_cont)) + 
+#   # xlim(-0.5, 1.8) +
+#   theme(axis.title = element_text(size = 10, face = "bold", colour = "black"),
+#         panel.background = element_blank(),
+#         panel.border = element_rect(fill = NA, colour = "black"), 
+#         axis.ticks = element_blank(),
+#         axis.text = element_blank(),
+#         legend.key = element_blank(), 
+#         legend.title = element_text(size = 10, face = "bold", colour = "black"), 
+#         legend.text = element_text(size = 9, colour = "black"),
+#         legend.position = c(0.92, 0.6),
+#         legend.margin = margin(-0.3,0,0,0, unit = "cm"),
+#         text = element_text(size = 30)) +
+#   labs(fill = "Month", shape = "Station") +
+#   guides(fill = guide_legend(override.aes = list(shape = 21)))
 
 # ggsave(here("figures_new", "nmds_micro_absolute_photo.png"),
 #        width = 6, height = 4.5, dpi = 300)
 ```
 
-```{r}
-cl_p %>% 
-  filter(site_id == "DFO2" & filter_type == "3um") %>% 
-  ggplot(aes(x = m20, y = m30)) +
-  geom_point() +
-  lims(x = c(0, 1),
-       y = c(0, 1))
-```
+
 
