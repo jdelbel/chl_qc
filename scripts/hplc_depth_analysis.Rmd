@@ -81,6 +81,11 @@ chl_qc <- chl_qc %>%
   group_by(date, site_id, line_out_depth, filter_type) %>% 
   distinct(.keep_all = TRUE) %>% 
   ungroup()
+
+#separating chl bulk
+chl_bulk <- chl_qc %>% 
+  filter(filter_type == "Bulk GF/F")
+
 ```
 
 ```{r}
@@ -350,6 +355,65 @@ fig <- (f1 + f2 + f3 + f4 + f5 + f6 + f7 + plot_layout(ncol = 3))
 ggsave(here("figs_invent", "hplc_correlation_test.png"),
        width = 16, height = 16, dpi = 300)
 ```
+
+```{r}
+#Plotting out data ranges for 20 and 30m bulk chl.
+f1 <- chl_bulk %>% 
+  filter(line_out_depth == 20 & chla > 0) %>% 
+  ggplot(aes(x = as.factor(month), y = chla, fill = site_id)) +
+  geom_boxplot(position = position_dodge(preserve = "single"), alpha = 0.8,
+               color = "black", lwd = 0.7) +
+  geom_dotplot(aes(fill = site_id), color = "black", trim = FALSE, binaxis = 'y', 
+               stackdir = 'center', dotsize = 0.2,
+               position = position_dodge(0.8)) +
+  geom_hline(yintercept = 1.0) +
+  ggsci::scale_fill_npg() +
+  scale_y_continuous(breaks=seq(0, 12, 2)) +
+  annotate("text", x = 1, y = 14, label = "20m", size = 12) +
+  labs(y = "chl (ug/L)",
+       x = "Month") +
+  theme_bw() +
+  theme(legend.position = c(0.92, 0.85),
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 35),
+        axis.text = element_text(colour = "black"))
+
+f2 <- chl_bulk %>% 
+  filter(line_out_depth == 30 & chla > 0) %>% 
+  ggplot(aes(x = as.factor(month), y = chla, fill = site_id)) +
+  geom_boxplot(position = position_dodge(preserve = "single"), alpha = 0.8,
+               color = "black", lwd = 0.7) +
+  geom_dotplot(aes(fill = site_id), color = "black", trim = FALSE, binaxis = 'y', 
+               stackdir = 'center', dotsize = 0.2,
+               position = position_dodge(0.8)) +
+  geom_hline(yintercept = 1.0) +
+  scale_y_continuous(breaks=seq(0, 12, 2)) +
+  ggsci::scale_fill_npg() +
+  annotate("text", x = 1, y = 11, label = "30m", size = 12) +
+  labs(y = "chl (ug/L)",
+       x = "Month") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        text = element_text(size = 35),
+        axis.text = element_text(colour = "black"))
+
+fig <- f1/f2
+
+ggsave(here("figs_invent", "bulk_chl_deep_conc.png"), fig,
+       width = 16, height = 12, dpi = 300)
+
+test <- chl_bulk %>% 
+  filter(site_id == "QU39" & line_out_depth == 30 & month == 2)
+
+
+```
+
+
+
+
 
 ```{r}
 #Working on nmds
