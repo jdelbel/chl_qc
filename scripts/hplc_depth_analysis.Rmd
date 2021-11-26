@@ -54,6 +54,11 @@ qu39_2020_20 <- read_xls(here("files", "2020_20m.xls"),
 qu39 <- rbind(qu39_2019_0, qu39_2019_5, qu39_2019_10, qu39_2019_20, 
               qu39_2020_0, qu39_2020_5, qu39_2020_10, qu39_2020_20 
               )
+
+#Download hplc data
+qu39_hplc <- read_xlsx(here("files", "hplc_qu39_2019_2020.xlsx"),
+                      sheet = "Hakai Data")
+
 ```
 
 
@@ -87,6 +92,32 @@ chl_bulk <- chl_qc %>%
   filter(filter_type == "Bulk GF/F")
 
 ```
+```{r}
+#Selecting HPLC columns used in chemtax
+qu39_hplc_chem <- qu39_hplc %>% 
+  select(date, depth = line_out_depth, chl_c1_c2, peri, but_19 =`_19_but`,
+         hex_19 = `_19_hex`, prasinoxanthin, alloxanthin, zeaxanthin, lutein,
+         chl_b, all_chl_a)
+
+#Pivoting longer 
+qu39_hplc_tidy <- qu39_hplc_chem %>% 
+  pivot_longer(c(chl_c1_c2:all_chl_a),
+               names_to = "pigment", values_to = "conc")
+
+qu39_all_chla <- qu39_hplc_tidy %>% 
+  filter(pigment == "all_chl_a") %>% 
+  select(date, depth, all_chla = conc)
+
+qu39_hplc_tidy <- qu39_hplc_tidy %>% 
+  left_join(qu39_all_chla)
+
+qu39_hplc_tidy <- qu39_hplc_tidy %>% 
+  mutate(all_chla_rat = conc/all_chla)
+
+qu39_hplc_tidy <- qu39_hplc_tidy %>% 
+  mutate(month = lubridate::month(date))
+```
+
 
 ```{r}
 #Setting data format
@@ -190,7 +221,7 @@ ggsave(here("figs_invent", "HPLC_TS_QU39_filt-type_PERC.png"),
 #Correlation matrix for each phyto group and depth
 
 cyan <- qu39_wide_p %>% 
-  filter(phyto_group == "cyan") %>% 
+  filter(phyto_group == "Cyan") %>% 
   select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
   drop_na()
 
@@ -213,7 +244,7 @@ f1 <- ggcorrplot(corr_cyan, outline.color = "white", lab = TRUE, type = "lower",
         text = element_text(size = 30))
 
 hapt <- qu39_wide_p %>% 
-  filter(phyto_group == "hapto") %>% 
+  filter(phyto_group == "Hapt") %>% 
   select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
   drop_na()
 
@@ -237,7 +268,7 @@ f2 <- ggcorrplot(corr_hapt, outline.color = "white", lab = TRUE, type = "lower",
         text = element_text(size = 30))
 
 green <- qu39_wide_p %>% 
-  filter(phyto_group == "green") %>% 
+  filter(phyto_group == "Chlo") %>% 
   select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
   drop_na()
 
@@ -250,7 +281,7 @@ f3 <- ggcorrplot(corr_green, outline.color = "white", lab = TRUE, type = "lower"
            p.mat = p.mat_green, lab_size = 10) +
   scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
                       high =  "red") +
-  annotate("text", x = 2, y = 3.4, label = "Green", size = 12) +
+  annotate("text", x = 2, y = 3.4, label = "Chlo", size = 12) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         axis.title.x = element_blank(),
@@ -261,7 +292,7 @@ f3 <- ggcorrplot(corr_green, outline.color = "white", lab = TRUE, type = "lower"
         text = element_text(size = 30))
 
 cryp <- qu39_wide_p %>% 
-  filter(phyto_group == "cryp") %>% 
+  filter(phyto_group == "Cryp") %>% 
   select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
   drop_na()
 
@@ -283,7 +314,7 @@ f4 <- ggcorrplot(corr_cryp, outline.color = "white", lab = TRUE, type = "lower",
         text = element_text(size = 30))
 
 dino <- qu39_wide_p %>% 
-  filter(phyto_group == "dino") %>% 
+  filter(phyto_group == "Dino") %>% 
   select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
   drop_na()
 
@@ -306,7 +337,7 @@ f5 <- ggcorrplot(corr_dino, outline.color = "white", lab = TRUE, type = "lower",
         text = element_text(size = 30))
 
 dict <- qu39_wide_p %>% 
-  filter(phyto_group == "dict") %>% 
+  filter(phyto_group == "Dict") %>% 
   select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
   drop_na()
 
@@ -328,7 +359,7 @@ f6 <- ggcorrplot(corr_dict, outline.color = "white", lab = TRUE, type = "lower",
         text = element_text(size = 30))
 
 diat <- qu39_wide_p %>% 
-  filter(phyto_group == "diat") %>% 
+  filter(phyto_group == "Diat") %>% 
   select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`) %>% 
   drop_na()
 
@@ -352,7 +383,7 @@ f7 <- ggcorrplot(corr_diat, outline.color = "white", lab = TRUE, type = "lower",
 
 fig <- (f1 + f2 + f3 + f4 + f5 + f6 + f7 + plot_layout(ncol = 3))
 
-ggsave(here("figs_invent", "hplc_correlation_test.png"),
+ggsave(here("figs_invent", "hplc_correlation.png"),
        width = 16, height = 16, dpi = 300)
 ```
 
@@ -410,70 +441,209 @@ test <- chl_bulk %>%
 
 
 ```
+```{r}
+
+#Plotting out data for all depths
+f1 <- chl_bulk %>% 
+  filter(line_out_depth == 0 & chla > 0 & chla < 50) %>% 
+  ggplot(aes(x = as.factor(month), y = chla, fill = site_id)) +
+  geom_boxplot(position = position_dodge(preserve = "single"), alpha = 0.8,
+               color = "black", lwd = 0.7) +
+  geom_dotplot(aes(fill = site_id), trim = FALSE, binaxis = 'y', 
+               stackdir = 'center', dotsize = 0.3,
+               position = position_dodge(0.8)) +
+  geom_hline(yintercept = 2.0) +
+  geom_hline(yintercept = 5.0) +
+  ggsci::scale_fill_npg() +
+  # scale_y_continuous(breaks=seq(0, 12, 2)) +
+  annotate("text", x = 1, y = 26, label = "0m", size = 12) +
+  labs(y = "chl (ug/L)",
+       x = "Month") +
+  theme_bw() +
+  theme(legend.position = c(0.92, 0.80),
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 40),
+        axis.text = element_text(colour = "black"))
+
+f2 <- chl_bulk %>% 
+  filter(line_out_depth == 0 & chla > 0 & chla < 50) %>% 
+  ggplot(aes(x = as.factor(month), y = chla, fill = site_id)) +
+  geom_boxplot(position = position_dodge(preserve = "single"), alpha = 0.8,
+               color = "black", lwd = 0.7) +
+  geom_dotplot(aes(fill = site_id), color = "black", trim = FALSE, binaxis = 'y', 
+               stackdir = 'center', dotsize = 0.2,
+               position = position_dodge(0.8)) +
+  geom_hline(yintercept = 2.0) +
+  geom_hline(yintercept = 5.0) +
+  ggsci::scale_fill_npg() +
+  # scale_y_continuous(breaks=seq(0, 12, 2)) +
+  annotate("text", x = 1, y = 26, label = "5m", size = 12) +
+  labs(y = "chl (ug/L)",
+       x = "Month") +
+  theme_bw() +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 40),
+        axis.text = element_text(colour = "black"))
+
+f3 <- chl_bulk %>% 
+  filter(line_out_depth == 0 & chla > 0 & chla < 50) %>% 
+  ggplot(aes(x = as.factor(month), y = chla, fill = site_id)) +
+  geom_boxplot(position = position_dodge(preserve = "single"), alpha = 0.8,
+               color = "black", lwd = 0.7) +
+  geom_dotplot(aes(fill = site_id), color = "black", trim = FALSE, binaxis = 'y', 
+               stackdir = 'center', dotsize = 0.2,
+               position = position_dodge(0.8)) +
+  geom_hline(yintercept = 2.0) +
+  geom_hline(yintercept = 5.0) +
+  ggsci::scale_fill_npg() +
+  # scale_y_continuous(breaks=seq(0, 12, 2)) +
+  annotate("text", x = 1, y = 26, label = "10m", size = 12) +
+  labs(y = "chl (ug/L)",
+       x = "Month") +
+  theme_bw() +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 40),
+        axis.text = element_text(colour = "black"))
+
+f4 <- chl_bulk %>% 
+  filter(line_out_depth == 20 & chla > 0) %>% 
+  ggplot(aes(x = as.factor(month), y = chla, fill = site_id)) +
+  geom_boxplot(position = position_dodge(preserve = "single"), alpha = 0.8,
+               color = "black", lwd = 0.7) +
+  geom_dotplot(aes(fill = site_id), color = "black", trim = FALSE, binaxis = 'y', 
+               stackdir = 'center', dotsize = 0.2,
+               position = position_dodge(0.8)) +
+  geom_hline(yintercept = 2.0) +
+  geom_hline(yintercept = 5.0) +
+  ggsci::scale_fill_npg() +
+  scale_y_continuous(breaks=seq(0, 12, 2)) +
+  annotate("text", x = 1, y = 14, label = "20m", size = 12) +
+  labs(y = "chl (ug/L)",
+       x = "Month") +
+  theme_bw() +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        text = element_text(size = 40),
+        axis.text = element_text(colour = "black"))
+
+f5 <- chl_bulk %>% 
+  filter(line_out_depth == 30 & chla > 0) %>% 
+  ggplot(aes(x = as.factor(month), y = chla, fill = site_id)) +
+  geom_boxplot(position = position_dodge(preserve = "single"), alpha = 0.8,
+               color = "black", lwd = 0.7) +
+  geom_dotplot(aes(fill = site_id), color = "black", trim = FALSE, binaxis = 'y', 
+               stackdir = 'center', dotsize = 0.2,
+               position = position_dodge(0.8)) +
+  geom_hline(yintercept = 2.0) +
+  geom_hline(yintercept = 5.0) +
+  scale_y_continuous(breaks=seq(0, 12, 2)) +
+  ggsci::scale_fill_npg() +
+  annotate("text", x = 1, y = 11, label = "30m", size = 12) +
+  labs(y = "chl (ug/L)",
+       x = "Month") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        text = element_text(size = 40),
+        axis.text = element_text(colour = "black"))
+
+fig <- f1/f2/f3/f4/f5
+
+ggsave(here("figs_invent", "bulk_chl_all_conc.png"), fig,
+       width = 16, height = 20, dpi = 300)
+
+```
+```{r}
+#Pigment:TChla ratios by depth
+
+qu39_hplc_tidy %>% 
+  filter(!pigment == "all_chl_a" & !depth == 30) %>% 
+  ggplot(aes(x = as.factor(month), y = all_chla_rat, fill = as.factor(depth))) +
+  geom_boxplot(position = position_dodge(preserve = "single"), alpha = 0.8,
+               color = "black", lwd = 0.7) +
+  geom_dotplot(aes(fill = depth), trim = FALSE, binaxis = 'y', 
+               stackdir = 'center', dotsize = 0.3,
+               position = position_dodge(0.8)) +
+  facet_wrap(~ pigment, ncol = 1, scales = "free_y") +
+  ggsci::scale_fill_npg() +
+  # scale_y_continuous(breaks=seq(0, 12, 2)) +
+  labs(y = "chl (ug/L)",
+       x = "Month") +
+  theme_bw() +
+  theme(legend.position = c(0.92, 0.80),
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        text = element_text(size = 40),
+        axis.text = element_text(colour = "black"))
 
 
 
+ggsave(here("figs_invent", "test.png"),
+       width = 16, height = 26, dpi = 300)
 
-
+```
 ```{r}
 #Working on nmds
-# c_nmds <- c_dm %>%
-#   select(date:chla_dm) %>% 
-#   pivot_wider(names_from = filter_type, values_from = chla_dm)
-# 
-# #Arranging according to site ID and date
-# c_nmds <- c_nmds %>% 
-#   mutate(month = lubridate::month(date)) %>% 
-#   arrange(site_id, date) %>% 
-#   relocate(month, .after = date)
-# 
-# nq <- c_nmds %>% 
-#   filter(site_id == "QU39")
-# 
-# nk <- c_nmds %>% 
-#   filter(site_id == "KC10" & `3um` > 0)  
-# 
-# nq_conc <- nq[, 5:ncol(nq)]
-# 
-# nk_conc <- nk[, 5:ncol(nk)]
-# 
-# nq_rel <- decostand(nq_conc, method = "total")
-# 
-# nq_conc_t <- log10(nq_conc + 1)
-# 
-# nk_conc_t <- log10(nk_conc + 1)
-# 
-# nq_rel_t <- sqrt(nq_rel)
+chem_wide_grp <- qu39_tidy %>%
+  select(date:TChla_mean) %>%
+  pivot_wider(names_from = phyto_group, values_from = TChla_mean)
+
+#Arranging according to site ID and date
+chem_wide_grp <- chem_nmds %>%
+  mutate(month = lubridate::month(date)) %>%
+  arrange(site_id, date) %>%
+  relocate(month, .after = date)
+ 
+chem_conc_tr <- chem_wide_grp[, 5:ncol(chem_wide_grp)]
+
+chem_conc_tr <- log10(chem_conc_tr + 1)
+
+chem_perc_tr <- chem_wide_grp[, 5:ncol(chem_wide_grp)]
+
+chem_perc_tr <- decostand(chem_perc_tr, method = "total")
+
+chem_perc_tr <- sqrt(chem_perc_tr)
 
 ```
 
 ```{r}
-# nq_nmds <-  metaMDS(nq_conc_t, distance = "bray", autotransform = FALSE,
-#                          k = 2, trymax = 100) 
-# 
-# 
-# 
-# nq_nmds_rel <-  metaMDS(nq_rel_t, distance = "bray", autotransform = FALSE,
-#                          k = 2, trymax = 100) 
-# 
-# nk_nmds <-  metaMDS(nk_conc_t, distance = "bray", autotransform = FALSE,
-#                          k = 2, trymax = 100) 
-# 
-# nq_nmds #0.08 - Good
-# nq_nmds_rel
-# nk_nmds
-# 
-# stressplot(nq_nmds)
+#Run nMDS - needed 3 dimensions - no convergence with 2. Not sure what this means, but converged at 0.092 
+chem_nmds <-  metaMDS(chem_conc_tr, distance = "bray", autotransform = FALSE,
+                         k = 3, trymax = 100)
+
+#Run nMDS on relative data - converged at 0.16
+chem_nmds_rel <-  metaMDS(chem_perc_tr, distance = "bray", autotransform = FALSE,
+                         k = 2, trymax = 100)
+
+#Run with 3 dimensions - no convergence with 2. Not sure what this means, but converged at 0.092 
+
+#Plotting stress
+stressplot(chem_nmds)
+stressplot(chem_nmds_rel)
 ```
+
+
+
 ```{r}
-# data.scores = as.data.frame(scores(nq_nmds))
-# data.scores$month = nq$month
-# data.scores$depth = nq$line_out_depth
-# 
-# data.scores_rel = as.data.frame(scores(nq_nmds_rel))
-# data.scores_rel$month = nq$month
-# data.scores_rel$depth = nq$line_out_depth
-# 
+#Pulling out months and depths so that I can add to nmds plot
+data.scores = as.data.frame(scores(chem_nmds))
+data.scores$month = chem_wide_grp$month
+data.scores$depth = chem_wide_grp$depth
+
+data.scores_rel = as.data.frame(scores(chem_nmds_rel))
+data.scores_rel$month = chem_wide_grp$month
+data.scores_rel$depth = chem_wide_grp$depth
+
 # data.scores_k = as.data.frame(scores(nk_nmds))
 # data.scores_k$month = nk$month
 # data.scores_k$depth = nk$line_out_depth
@@ -482,34 +652,62 @@ test <- chl_bulk %>%
 ```{r}
 #Plotting nMDS - commented sections are for if I want to add environmental fits.
 
-# ggplot(data = data.scores_rel, aes(x = NMDS1, y = NMDS2)) + 
-#   geom_point(data = data.scores_rel, aes(fill = as.factor(depth)),
-#              size = 4, pch = 21) + 
-#   scale_fill_brewer(palette = "RdYlBu") +
-#   # scale_fill_manual(values = c("blue", "springgreen4", "black", "magenta")) + 
-#   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) + 
-#   # geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2), 
-#   #              data = en_coord_cont, size = 1, alpha = 0.5, colour = "grey30") +
-#   # geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
-#   #           fontface = "bold", label = row.names(en_coord_cont)) + 
-#   # xlim(-0.5, 1.8) +
-#   theme(axis.title = element_text(size = 10, face = "bold", colour = "black"),
-#         panel.background = element_blank(),
-#         panel.border = element_rect(fill = NA, colour = "black"), 
-#         axis.ticks = element_blank(),
-#         axis.text = element_blank(),
-#         legend.key = element_blank(), 
-#         legend.title = element_text(size = 10, face = "bold", colour = "black"), 
-#         legend.text = element_text(size = 9, colour = "black"),
-#         legend.position = c(0.92, 0.6),
-#         legend.margin = margin(-0.3,0,0,0, unit = "cm"),
-#         text = element_text(size = 30)) +
-#   labs(fill = "Month", shape = "Station") +
-#   guides(fill = guide_legend(override.aes = list(shape = 21)))
+ggplot(data = data.scores, aes(x = NMDS1, y = NMDS2)) +
+  geom_point(data = data.scores, aes(fill = as.factor(depth)),
+             size = 4, pch = 21) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  # scale_fill_manual(values = c("blue", "springgreen4", "black", "magenta")) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  # geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+  #              data = en_coord_cont, size = 1, alpha = 0.5, colour = "grey30") +
+  # geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
+  #           fontface = "bold", label = row.names(en_coord_cont)) +
+  # xlim(-0.5, 1.8) +
+  theme(axis.title = element_text(size = 10, face = "bold", colour = "black"),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, colour = "black"),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.key = element_blank(),
+        legend.title = element_text(size = 10, face = "bold", colour = "black"),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.position = c(0.92, 0.6),
+        legend.margin = margin(-0.3,0,0,0, unit = "cm"),
+        text = element_text(size = 30)) +
+  labs(fill = "Month", shape = "Station") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
 
 # ggsave(here("figures_new", "nmds_micro_absolute_photo.png"),
 #        width = 6, height = 4.5, dpi = 300)
 ```
 
+```{r}
+#Plotting nMDS - commented sections are for if I want to add environmental fits.
+
+ggplot(data = data.scores_rel, aes(x = NMDS1, y = NMDS2)) +
+  geom_point(data = data.scores_rel, aes(fill = as.factor(depth)),
+             size = 4, pch = 21) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  # scale_fill_manual(values = c("blue", "springgreen4", "black", "magenta")) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  # geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+  #              data = en_coord_cont, size = 1, alpha = 0.5, colour = "grey30") +
+  # geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
+  #           fontface = "bold", label = row.names(en_coord_cont)) +
+  # xlim(-0.5, 1.8) +
+  theme(axis.title = element_text(size = 10, face = "bold", colour = "black"),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, colour = "black"),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.key = element_blank(),
+        legend.title = element_text(size = 10, face = "bold", colour = "black"),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.position = c(0.92, 0.6),
+        legend.margin = margin(-0.3,0,0,0, unit = "cm"),
+        text = element_text(size = 30)) +
+  labs(fill = "Month", shape = "Station") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
+```
 
 
