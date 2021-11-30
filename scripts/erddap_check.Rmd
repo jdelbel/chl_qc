@@ -92,7 +92,6 @@ c_p <- c_p %>%
   select(date, site_id, hakai_id, line_out_depth, collected, filter_type, 
          chla_flag, chla_final, phaeo_flag) %>% 
   filter(chla_flag == "AV" & phaeo_flag == "AV" & site_id %in% site_list)
-
 ```
 
 
@@ -306,21 +305,25 @@ c %>%
 
 
 ```{r}
-#Looking at samples that don't have complete filter set - not going to work as don't have in long format
+#Trying to see which filters have less than 3 size-fractions
 
+#Converting the chlorophyll datasheet to long format.
 c_long <- c %>% 
   select(time, date, site_id, line_out_depth, `20um` = chla_20um, 
          `3um` = chla_3_20um, `GF/F` = chla_gff_3um) %>% 
   pivot_longer(cols = c(`20um`, `3um`, `GF/F`), 
                names_to = "filter_type", values_to = "chla")
 
+
+#so this is using the erddap download and the following is using the portal download. Why are the numbers different?
 c_filt_check <- c_long %>%
-  filter(!is.na(chla)) %>% 
+  filter(!is.na(chla) & !filter_type == "Bulk GF/F") %>% 
   group_by(time, site_id, line_out_depth) %>%
   mutate(n_filt = n()) %>%
   ungroup() %>% 
   filter(n_filt < 3)
 
+#Data downloaded from the portal using parameters being included in erddap query. Maybe it's catching data outside of the erddap query?
 cp_filt_check <- c_p %>% 
   filter(!is.na(chla_final) & !filter_type == "Bulk GF/F") %>% 
   group_by(collected, site_id, line_out_depth) %>%
@@ -328,6 +331,7 @@ cp_filt_check <- c_p %>%
   ungroup() %>% 
   filter(n_filt < 3)
 
+#Pulling out important columns for merge with erdapp datasheet to join and try to cross compare.
 test_p <- cp_filt_check %>% 
   select(date, site_id, filter_type, line_out_depth, hakai_id) %>% 
   mutate(count_p = row_number())
@@ -336,12 +340,16 @@ test_e <- c_filt_check %>%
   select(date, site_id, line_out_depth, filter_type)%>% 
   mutate(count_e = row_number())
 
-
-
+#For some reason, the line out depth is in character format and needs to be converted to numeric to merge/join
 test_e[ ,3] <- sapply(test_e[ ,3], as.numeric)
 
-m4 <- test_p %>% 
-  left_join(test_e)
+#So these filters are on the 
+filt_check_join <- test_p %>% 
+  left_join(test_e) %>% 
+  filter(is.na(count_e))
+
+filt_check_list <- filt_check_join %>% 
+  select(hakai_id)
 
 #This filter is not on erddap. Why?
 c_check <- c %>% 
