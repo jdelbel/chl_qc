@@ -1,0 +1,100 @@
+---
+title: "Chlorophyll QC"
+output: html_notebook
+---
+
+This notebook is being made to start a chlorophyll QC process for new incoming samples. Comparisons will be made for the entire timeseries to look for unusual concentrations.
+
+```{r}
+#Upload packages
+library(tidyverse)
+library(here)
+```
+
+```{r}
+#Upload dataset
+chl <- read_csv(here("files", "chl_2022-01-04.csv"))
+```
+
+
+```{r}
+#Selecting relevant columns
+chl <- chl %>% 
+  select(date, site_id, line_out_depth, collected, analyzed, hakai_id, 
+         calibration, filter_type, before_acid, after_acid, chla, chla_flag, 
+         phaeo) 
+
+#Checking for duplicates
+chl <- chl %>% 
+  group_by(collected, site_id, line_out_depth, filter_type) %>% 
+  mutate(rep = n()) %>%
+  ungroup() %>% 
+  mutate(acid_ratio = before_acid/after_acid)
+
+chl_dup <- chl %>% 
+  filter(rep > 1)
+```
+
+
+```{r}
+#Turning this off for now.
+#Pivoting wider the chlorophyll data to make scatter plots.
+# chl_wide <- chl %>% 
+#   select(collected, site_id, line_out_depth, rep, filter_type, chla) %>% 
+#   pivot_wider(id_cols = c(collected, site_id, line_out_depth),
+#               names_from = c(filter_type, rep), 
+#               values_from = chla) %>%
+#   rename(bulk_chla_1 = `Bulk GF/F_1`,
+#          um20_chla_1 = `20um_1`,
+#          um3_chla_1 = `3um_1`,
+#          GFF_chla_1 = `GF/F_1`) %>% 
+#   mutate(sf_sum = um20_chla_1 + um3_chla_1 + GFF_chla_1,
+#          diff = bulk_chla_1 - sf_sum)
+
+
+#Turning this off for now.
+
+#Pivoting Acid Ratio
+# ar_wide <- chl_av %>% 
+#   select(collected, site_id, line_out_depth, rep, filter_type, acid_ratio) %>% 
+#   pivot_wider(id_cols = c(collected, site_id, line_out_depth),
+#               names_from = c(filter_type, rep), 
+#               values_from = acid_ratio) %>% 
+#   rename(ar_bulk = `Bulk GF/F_1`,
+#          ar_20  = `20um_1`,
+#          ar_3um = `3um_1`,
+#          ar_gff = `GF/F_1`)
+
+#Turning this off for now.
+
+#Joining Chla and Acid Ratios
+# chl_wide <- chl_wide %>% 
+#   left_join(ar_wide, by = c("collected", "site_id", "line_out_depth"))
+```
+
+```{r}
+#Looking at QU39 and making a time-series plot of bulk chl concentrations separated by depth and colored by flag
+
+qu39 %>%
+  filter(site_id == "QU39" & line_out_depth < 50 &
+           filter_type == "Bulk GF/F") %>% 
+  ggplot(aes(x = date, y = chla)) + 
+  geom_point(aes(fill = chla_flag), pch = 21, size = 3) + 
+  geom_line() + 
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  theme(text = element_text(size = 25),
+        axis.text = element_text(colour = "black"))
+
+ggsave(here("figures", "QC_qu39_depth_TS.png"), 
+       width = 16, height = 12, dpi=300)
+```
+```{r}
+#How many qu39 samples are there for each flag?
+qu39_flags <- qu39 %>% 
+  filter(filter_type == "Bulk GF/F") %>% 
+  group_by(chla_flag) %>% 
+  summarise(n = n()) %>%  
+  ungroup()
+
+```
+
