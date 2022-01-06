@@ -12,8 +12,11 @@ library(here)
 ```
 
 ```{r}
-#Upload dataset
+#Upload chl dataset - entire dataset downloaded from the portal on 2022-01-04
 chl <- read_csv(here("files", "chl_2022-01-04.csv"))
+
+#Upload Fluorometer dataset - only qu39 here?
+
 ```
 
 
@@ -24,6 +27,11 @@ chl <- chl %>%
          calibration, filter_type, before_acid, after_acid, chla, chla_flag, 
          phaeo) 
 
+#Adding month column
+chl <- chl %>% 
+  mutate(month = lubridate::month(date)) %>% 
+  relocate(month, .after = date)
+
 #Checking for duplicates
 chl <- chl %>% 
   group_by(collected, site_id, line_out_depth, filter_type) %>% 
@@ -31,8 +39,13 @@ chl <- chl %>%
   ungroup() %>% 
   mutate(acid_ratio = before_acid/after_acid)
 
-chl_dup <- chl %>% 
+#514 replicated records through the dataset
+dup <- chl %>% 
   filter(rep > 1)
+
+dup_qu39 <- chl %>% 
+  filter(site_id == "QU39" & rep > 1)
+
 ```
 
 
@@ -75,9 +88,56 @@ chl_dup <- chl %>%
 ```{r}
 #Looking at QU39 and making a time-series plot of bulk chl concentrations separated by depth and colored by flag
 
-qu39 %>%
+chl %>%
   filter(site_id == "QU39" & line_out_depth < 50 &
            filter_type == "Bulk GF/F") %>% 
+  ggplot(aes(x = date, y = chla)) + 
+  geom_point(aes(fill = chla_flag), pch = 21, size = 3) + 
+  geom_line() + 
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  theme_bw() +
+  theme(text = element_text(size = 25),
+        axis.text = element_text(colour = "black"))
+
+ggsave(here("figures", "QC__bulk_qu39_depth_TS.png"), 
+       width = 16, height = 12, dpi=300)
+```
+
+```{r}
+# I could make a box and whisker plot to of monthly data to show if any points fall outside of the expected range
+chl %>%
+  filter(site_id == "QU39" & line_out_depth < 50 &
+           filter_type == "Bulk GF/F") %>% 
+  ggplot(aes(x = as.factor(month), y = log10(chla + 1))) + 
+  geom_boxplot() +
+  # geom_dotplot(aes(fill = chla_flag), color = "black", trim = FALSE, binaxis = 'y', 
+  #              stackdir ='center', dotsize = 2) +
+  geom_jitter(aes(fill = chla_flag), pch = 21, size = 3, color = "black", 
+              alpha = 0.8, 
+              position=position_jitter(0.2)) +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  theme_bw() 
+
+ggsave(here("figures", "QC_bulk_qu39_depth_box.png"), 
+       width = 16, height = 12, dpi=300)
+```
+```{r}
+#Size fractionated sum versus Bulk
+#Fluorometer versus Bulk
+#HPLC versus Bulk
+```
+
+
+
+
+
+```{r}
+#Looking at QU39 20um TS
+
+
+chl %>%
+  filter(site_id == "QU39" & line_out_depth < 101 &
+           filter_type == "20um") %>% 
   ggplot(aes(x = date, y = chla)) + 
   geom_point(aes(fill = chla_flag), pch = 21, size = 3) + 
   geom_line() + 
@@ -85,14 +145,17 @@ qu39 %>%
   theme(text = element_text(size = 25),
         axis.text = element_text(colour = "black"))
 
-ggsave(here("figures", "QC_qu39_depth_TS.png"), 
+ggsave(here("figures", "QC_20um_qu39_depth_TS.png"), 
        width = 16, height = 12, dpi=300)
 ```
+
+
+
 ```{r}
 #How many qu39 samples are there for each flag?
-qu39_flags <- qu39 %>% 
-  filter(filter_type == "Bulk GF/F") %>% 
-  group_by(chla_flag) %>% 
+flags_qu39 <- chl %>% 
+  filter(site_id == "QU39") %>% 
+  group_by(filter_type, chla_flag) %>% 
   summarise(n = n()) %>%  
   ungroup()
 
