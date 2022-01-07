@@ -102,6 +102,26 @@ chl %>%
 ggsave(here("figures", "QC__bulk_qu39_depth_TS.png"), 
        width = 16, height = 12, dpi=300)
 ```
+```{r}
+#Looking at QU39 and making a time-series plot of bulk chl concentrations without a flag
+
+chl %>%
+  filter(site_id == "QU39" & line_out_depth < 50 &
+           filter_type == "Bulk GF/F" & is.na(chla_flag)) %>% 
+  ggplot(aes(x = date, y = chla)) + 
+  geom_point(pch = 21, size = 3, fill = "gray") + 
+  geom_line() + 
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  theme_bw() +
+  theme(text = element_text(size = 25),
+        axis.text = element_text(colour = "black"))
+
+ggsave(here("figures", "QC_bulk_qu39_depth_TS_no_flag.png"), 
+       width = 16, height = 12, dpi=300)
+```
+
+
+
 
 ```{r}
 # I could make a box and whisker plot to of monthly data to show if any points fall outside of the expected range
@@ -127,6 +147,67 @@ ggsave(here("figures", "QC_bulk_qu39_depth_box.png"),
 #HPLC versus Bulk
 ```
 
+```{r}
+qu39 <- chl %>% 
+  filter(site_id == "QU39")
+
+qu39_sf <- qu39 %>% 
+  filter(!filter_type == "Bulk GF/F")
+
+qu39_sf <- qu39_sf %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(filt_num = n()) %>% 
+  ungroup()
+
+qu39_filt_check_low <- qu39_sf %>% 
+  filter(filt_num < 3)
+
+qu39_filt_check_high <- qu39_sf %>% 
+  filter(filt_num > 3)
+
+qu39_sf <- qu39_sf %>% 
+  filter(filt_num == 3)
+
+qu39_sf <- qu39_sf %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique == 1)
+
+qu39_sf_sum <- qu39_sf %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(sf_sum = sum(chla)) %>% 
+  ungroup() %>% 
+  distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
+  select(collected, line_out_depth, sf_sum)
+
+
+
+qu39_bulk <- qu39 %>% 
+  filter(filter_type == "Bulk GF/F")
+
+qu39_bulk <- qu39_bulk %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(filt_num = n()) %>% 
+  ungroup()
+
+qu39_bulk_check <- qu39_bulk %>% 
+  filter(filt_num > 1)
+
+qu39_bulk <- qu39_bulk %>% 
+  filter(filt_num == 1)
+
+qu39_compare <- qu39_bulk %>% 
+  left_join(qu39_sf_sum)
+
+```
+
+```{r}
+qu39_compare %>% 
+  ggplot(aes(x = chla, y = sf_sum)) + 
+  geom_point() +
+  facet_wrap(~ chla_flag, scales = "free")
+```
 
 
 
