@@ -43,6 +43,7 @@ chl <- chl %>%
 dup <- chl %>% 
   filter(rep > 1)
 
+#Replicated records for QU39
 dup_qu39 <- chl %>% 
   filter(site_id == "QU39" & rep > 1)
 
@@ -99,7 +100,7 @@ chl %>%
   theme(text = element_text(size = 25),
         axis.text = element_text(colour = "black"))
 
-ggsave(here("figures", "QC__bulk_qu39_depth_TS.png"), 
+ggsave(here("figures_qc", "QC_bulk_qu39_depth_TS.png"), 
        width = 16, height = 12, dpi=300)
 ```
 ```{r}
@@ -116,13 +117,9 @@ chl %>%
   theme(text = element_text(size = 25),
         axis.text = element_text(colour = "black"))
 
-ggsave(here("figures", "QC_bulk_qu39_depth_TS_no_flag.png"), 
+ggsave(here("figures_qc", "QC_bulk_qu39_depth_TS_no_flag.png"), 
        width = 16, height = 12, dpi=300)
 ```
-
-
-
-
 ```{r}
 # I could make a box and whisker plot to of monthly data to show if any points fall outside of the expected range
 chl %>%
@@ -138,9 +135,10 @@ chl %>%
   facet_grid(line_out_depth ~ ., scales = "free_y") +
   theme_bw() 
 
-ggsave(here("figures", "QC_bulk_qu39_depth_box.png"), 
+ggsave(here("figures_qc", "QC_bulk_qu39_depth_box.png"), 
        width = 16, height = 12, dpi=300)
 ```
+
 ```{r}
 #Size fractionated sum versus Bulk
 #Fluorometer versus Bulk
@@ -148,73 +146,94 @@ ggsave(here("figures", "QC_bulk_qu39_depth_box.png"),
 ```
 
 ```{r}
+#Pulling out qu39 data
 qu39 <- chl %>% 
   filter(site_id == "QU39")
 
+#Pulling out QU39 size-fractionated data
 qu39_sf <- qu39 %>% 
   filter(!filter_type == "Bulk GF/F")
 
+#Looking at number of filters for each size fraction
 qu39_sf <- qu39_sf %>% 
   group_by(collected, line_out_depth) %>% 
   mutate(filt_num = n()) %>% 
   ungroup()
 
+#Looking for size fraction sets that have less than 3 filters -  this should be investigated to see what these have less then three filters in the set. I haven't applied any flags or removed records with no data, so these would be missing records?
 qu39_filt_check_low <- qu39_sf %>% 
   filter(filt_num < 3)
 
+#Looking at size fraction sets that have more than 4 filters. It also shows if a filter size has been replicated.
 qu39_filt_check_high <- qu39_sf %>% 
   filter(filt_num > 3)
 
+#Subsetting where there are 3 size-fractionated filters (as there should be). This misses where there may be 2 duplicated filter types and one filter type missing. Do I account for this later?
 qu39_sf <- qu39_sf %>% 
   filter(filt_num == 3)
 
+#This find and isolates where a filter type has been replicated (and likely one is missing as there are 3 filters total) - Doesn't seem to be catching everything. Cross checked with my excel list.
+qu39_dup_filt <- qu39_sf %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique > 1)
+
+#This filters for where there are 3 filters with no duplicated filter types.
 qu39_sf <- qu39_sf %>% 
   group_by(collected, line_out_depth, filter_type) %>% 
   mutate(filt_unique = n()) %>% 
   ungroup() %>% 
   filter(filt_unique == 1)
 
+#Calculating the size fractionated sum for comparison with the bulk data
 qu39_sf_sum <- qu39_sf %>% 
   group_by(collected, line_out_depth) %>% 
   mutate(sf_sum = sum(chla)) %>% 
   ungroup() %>% 
   distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
   select(collected, line_out_depth, sf_sum)
+```
 
 
+```{r}
+#Working with the bulk data
 
+#Pulling out the bulk filters
 qu39_bulk <- qu39 %>% 
   filter(filter_type == "Bulk GF/F")
 
+#Adding a row showing duplicates for each collection time and depth
 qu39_bulk <- qu39_bulk %>% 
   group_by(collected, line_out_depth) %>% 
   mutate(filt_num = n()) %>% 
   ungroup()
 
+#Looking at duplicated samples -  24 records. One true and the rest are from when we sent samples to DFO for comparison. The DFO data includes the DFO data, which wasn't analyzed by us, but also a black row for each depth that must be a portal error.
 qu39_bulk_check <- qu39_bulk %>% 
   filter(filt_num > 1)
 
+#Just pulling out records without any duplicates
 qu39_bulk <- qu39_bulk %>% 
   filter(filt_num == 1)
 
+#Merging with the size-fractionated data for comparison.
 qu39_compare <- qu39_bulk %>% 
   left_join(qu39_sf_sum)
 
 ```
 
 ```{r}
+#Some issues here with data that is SVC but should likely be SVD. Notably for bulk samples.
+
 qu39_compare %>% 
-  ggplot(aes(x = chla, y = sf_sum)) + 
-  geom_point() +
-  facet_wrap(~ chla_flag, scales = "free")
+  ggplot(aes(x = chla, y = sf_sum, fill = chla_flag)) + 
+  geom_point(pch = 21) +
+  theme_bw()
 ```
-
-
-
 
 ```{r}
 #Looking at QU39 20um TS
-
 
 chl %>%
   filter(site_id == "QU39" & line_out_depth < 101 &
@@ -226,7 +245,7 @@ chl %>%
   theme(text = element_text(size = 25),
         axis.text = element_text(colour = "black"))
 
-ggsave(here("figures", "QC_20um_qu39_depth_TS.png"), 
+ggsave(here("figures_qc", "QC_20um_qu39_depth_TS.png"), 
        width = 16, height = 12, dpi=300)
 ```
 
