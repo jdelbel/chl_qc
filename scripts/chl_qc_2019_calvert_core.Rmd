@@ -1,0 +1,463 @@
+---
+title: "Chlorophyll QC"
+output: html_notebook
+---
+
+This notebook is being made to start a chlorophyll QC process for new incoming samples. Comparisons will be made for the entire timeseries to look for unusual concentrations.
+
+This is currently configured to only QC new data, but it would be good to have all the data from the timeseries to compare new data with long term trends. Just tricky because there are a lot of errors to sift through in the old data (i.e. lots of duplicates, missing records etc. that complicate the checks.)
+
+```{r}
+#Upload packages
+library(tidyverse)
+library(here)
+library(patchwork)
+library(readxl)
+```
+
+```{r}
+#Upload chl dataset - entire dataset downloaded from the portal on 2022-01-04
+chl <- read_csv(here("files", "calvert_2022-04-20_chl.csv"))
+
+#Upload HPLC data
+hplc <- read_csv(here("files", "qcs01-2022-04-20_hplc.csv"))
+
+#Upload CTD data
+ctd <- read_excel(here("files", "calvert_2022-04-20_ctd.xlsx"),
+                      sheet = "Data")
+
+#Upload CTD metadata from drops sheet in portal excel download
+ctd_meta <- read_excel(here("files",  "calvert_2022-04-20_ctd.xlsx"),
+                      sheet = "Drops")
+
+```
+
+
+```{r}
+#Selecting relevant columns
+chl <- chl %>% 
+  select(date, site_id, line_out_depth, collected, analyzed, hakai_id, 
+         calibration:calibration_slope, filter_type, before_acid, after_acid,
+         acid_flag, chla, chla_flag, phaeo, phaeo_flag) 
+
+#Adding month column
+chl <- chl %>% 
+  mutate(month = lubridate::month(date)) %>% 
+  relocate(month, .after = date)
+
+#Creating duplicate and acid ratio columns
+chl <- chl %>% 
+  group_by(collected, site_id, line_out_depth, filter_type) %>% 
+  mutate(rep = n()) %>%
+  ungroup() %>% 
+  mutate(acid_ratio = before_acid/after_acid)
+
+#Pulling out duplicates - 1 duplicate. Looks like filter type input incorrectly.
+dup <- chl %>% 
+  filter(rep > 1)
+
+```
+
+```{r}
+#Wrangling hplc dataset
+
+#Selecting important columns and limiting to records with results
+hplc <- hplc %>% 
+  filter(!is.na(all_chl_a)) %>% 
+  select(date, line_out_depth, all_chl_a)
+```
+
+```{r}
+#Wrangling CTD profiles data
+
+#Reduce columns, rename to workable name for queries and join drop metadata to drop data
+ctd <- ctd %>%
+  left_join(ctd_meta, by = "Cast PK") %>% 
+  mutate(date = lubridate::date(`Measurement time`)) %>%
+  mutate(year = lubridate::year(`Measurement time`)) %>%
+  select(castpk = `Cast PK`, ctdNum = `CTD serial number`, 
+         ctdFirm = `CTD firmware version`, site_id = Station.x, lat = Latitude,
+         long = Longitude, time = `Measurement time`, date, year,
+         dep = `Depth (m)`, pres = `Pressure (dbar)`,
+         flu = `Fluorometry Chlorophyll (ug/L)`)
+
+#checking if there are duplicated CTD cast - There was a duplicate cast at KC10 on the most recent survey
+check_ctd_dup <- ctd %>% 
+  distinct(castpk, date, site_id) %>% 
+  group_by(date, site_id) %>% 
+  summarise(n_cast = n()) %>% 
+  ungroup()
+
+#checking min/max ctd cast depths for each castPK - All start at 1 except 2
+check_ctd_depth <- ctd %>% 
+  group_by(castpk) %>% 
+  summarise(min_dep = min(pres),
+            max_dep = max(pres)) %>% 
+  ungroup()
+
+#Three different CTDs used. 
+check_ctd_inst <- ctd %>% 
+  distinct(ctdNum)
+```
+
+
+```{r}
+#Diagnostic checks
+
+#Depth check - where were samples collected - only bulk collected >30m.
+check_depth <- chl %>% 
+  distinct(line_out_depth, filter_type)
+
+#Looking at calibrations applied to data - three calibrations
+check_cali <- chl %>% 
+  distinct(calibration, acid_ratio_correction_factor, acid_coefficient,
+           calibration_slope)
+
+#Looking for negative values - 5 records.
+check_neg <- chl %>% 
+  filter(chla < 0 | phaeo < 0)
+
+#Looking for no concentration - lots, mostly new data not analyzed yet, but some older.
+check_na <- chl %>% 
+  filter(is.na(chla) | is.na(phaeo))
+
+#Checking if there are any pre-existing flags - some are already flagged from previous rounds 
+check_flag <- chl %>% 
+  filter(!is.na(chla_flag) | !is.na(phaeo_flag))
+
+check_flag_summary <- chl %>% 
+  group_by(chla_flag) %>% 
+  summarise(num_flag = n())
+
+#Checking acid flag - sometimes the crew flags suspect data here rather than directly applying flags
+#Currently 20 records from a single day where the chlorophyll blanks were higher than usual.
+check_acid_flag <- chl %>% 
+  filter(!is.na(acid_flag))
+
+#Looking for filters with low acid ratios - lots. Need to look into these.
+check_ar <- chl %>% 
+  filter(acid_ratio < 1.2)
+
+#Plotting depths with low acid ratio - all bulk samples from > 100m (expected) 
+check_ar %>% 
+  filter(chla_flag == "AV" | is.na(chla_flag)) %>% 
+  ggplot(aes(x = as.factor(line_out_depth), fill = filter_type)) +
+  geom_bar(stat = "count", position = "stack") +
+  facet_grid(chla_flag ~ site_id) +
+  labs(x = "depth",
+       y = "count") +
+  theme_bw()
+
+#So it looks like a lot of the unflagged data has low acid ratios at deeper depths.
+```
+
+
+```{r}
+#For now, I want to filter out any data with bad flags, negative values
+chl <- chl %>% 
+  filter(chla > 0 & !is.na(chla)) %>% 
+  filter(chla > 0 & chla_flag == "AV" | chla_flag == "ADL" | is.na(chla_flag))
+```
+
+
+
+
+```{r}
+#Investigating bulk data for errors
+
+#Pulling out the bulk filters
+chl_bulk <- chl %>% 
+  filter(filter_type == "Bulk GF/F")
+
+#Making a column showing if there are replicated filters.
+chl_bulk <- chl_bulk %>% 
+  group_by(collected, site_id, line_out_depth) %>% 
+  mutate(filt_num = n()) %>% 
+  ungroup()
+
+#Querying duplicated bulk records. 0.
+check_bulk_dup <- chl_bulk %>% 
+  filter(filt_num > 1)
+
+#Filtering out any duplicated
+chl_bulk <- chl_bulk %>% 
+  filter(filt_num == 1)
+
+#The bulk data looks good.
+```
+
+```{r}
+#Investigating size-fractionated data for errors.
+
+#Calculating the number of filters for each size-fraction set
+chl_sf <- chl %>% 
+  filter(!filter_type == "Bulk GF/F") %>%
+  filter(!is.na(chla)) %>% 
+  group_by(collected, site_id, line_out_depth) %>% 
+  mutate(filt_num = n()) %>% 
+  ungroup()
+
+#Looking for size fraction sets that have less than 3 filters - 19 records - 1 set AV flags.
+check_sf_low <- chl_sf %>% 
+  filter(filt_num < 3)
+
+#Looking at size fraction sets that have more than 3 filters. 0.
+check_sf_high <- chl_sf %>% 
+  filter(filt_num > 3)
+
+#Subsetting where there are 3 size-fractionated filters. 
+chl_sf <- chl_sf %>% 
+  filter(filt_num == 3)
+
+#Querying replicated filter types within a set - capturing where 3 filters, but two are replicated. 
+#One sample with two 20 um filters
+check_sf_dup <- chl_sf %>% 
+  group_by(collected, site_id, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique > 1)
+
+#Subsetting to remove the sample with duplicated filter
+chl_sf <- chl_sf %>% 
+  group_by(collected, site_id, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique == 1)
+
+#Since I removed these, I now need to recount all the filters for each sample as there will be some with < 3
+chl_sf <- chl_sf %>% 
+  group_by(collected, site_id, line_out_depth) %>% 
+  mutate(filt_num2 = n()) %>% 
+  ungroup() %>% 
+  filter(filt_num2 == 3)
+
+#The size-fractionated data looks good.
+```
+
+```{r}
+#Calculating the size-fractionated sum for comparison with the bulk
+chl_sf_sum <- chl_sf %>% 
+  group_by(collected, site_id, line_out_depth) %>% 
+  mutate(sf_sum = sum(chla)) %>% 
+  ungroup() %>% 
+  distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
+  select(collected, line_out_depth, sf_sum)
+
+#Removing deep bulk samples for joining with the SF sum.
+
+#Merging with the size-fractionated data for comparison.
+chl_comp <- chl_bulk %>%
+  select(date, collected, site_id, line_out_depth, bulk_chla = chla) %>% 
+  filter(line_out_depth < 99) %>% 
+  left_join(chl_sf_sum)
+
+#Looking why there are NAs in join. All from where SF did not have 3 filters in set.
+check_comp_na <- chl_comp %>% 
+  filter(is.na(bulk_chla) | is.na(sf_sum))
+
+#Now joining with hplc
+chl_comp <- chl_comp %>% 
+  left_join(hplc)
+
+#Now joining with CTD fluorescence.
+
+#First altering CTD file to make it comparable to the bottle data, which includes changing 1m pressure to 0m depth for joining with surface bottle data.
+ctd_join <- ctd %>% 
+  select(date, site_id, ctdNum, line_out_depth = pres, flu) %>% 
+  mutate(line_out_depth = case_when(line_out_depth == 1 ~ 0,
+                           TRUE ~ as.numeric(line_out_depth)))
+
+chl_comp <- chl_comp %>% 
+  left_join(ctd_join)
+
+#Filter comparison looks good
+```
+
+```{r}
+#Plotting scatter of bulk versus SF sum concentrations
+
+chl_comp %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum)) + 
+  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_smooth(method = "lm", color = "black") +
+  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 23, size = 8) +
+  ggpubr::stat_regline_equation(label.y = 25, size = 8) +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "SF-Sum Chla (ug/L)",
+       fill = "Depth") +
+  xlim(0, 30) + #Make sure to check data range and change these limits to include all data
+  ylim(0, 30) +
+  theme_bw()
+
+#Looks good, with exception to two filters where there was clearly issues. 
+```
+
+```{r}
+#Plotting scatter of bulk versus SF sum concentrations - coloring by station
+
+chl_comp %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum)) + 
+  geom_point(aes(fill = as.factor(site_id)), pch = 21, size = 3) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_smooth(method = "lm", color = "black") +
+  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 23, size = 8) +
+  ggpubr::stat_regline_equation(label.y = 25, size = 8) +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "SF-Sum Chla (ug/L)",
+       fill = "Depth") +
+  xlim(0, 30) + #Make sure to check data range and change these limits to include all data
+  ylim(0, 30) +
+  theme_bw()
+
+#Looks pretty darn good!
+```
+
+```{r}
+#Plotting scatter of bulk versus CTD fluorescence
+
+chl_comp %>% 
+  ggplot(aes(x = bulk_chla, y = flu)) + 
+  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_smooth(method = "lm", color = "black") +
+  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
+  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "CTD Fluor. (ug/L)",
+       fill = "Depth") +
+  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
+  ylim(0, 10) +
+  theme_bw()
+
+#Very interesting trends - CTD fluorescence is much lower than Bulk chlorophyll?
+```
+```{r}
+#Plotting scatter of bulk versus CTD fluorescence - without surface samples
+
+chl_comp %>% 
+  filter(!line_out_depth == 0) %>% 
+  ggplot(aes(x = bulk_chla, y = flu)) + 
+  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_smooth(method = "lm", color = "black") +
+  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
+  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "CTD Fluor. (ug/L)",
+       fill = "Depth") +
+  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
+  ylim(0, 10) +
+  theme_bw()
+
+#Very interesting trends - CTD fluorescence is much lower than bulk Chl (even with surface removed). Why?
+```
+```{r}
+#Plotting scatter of bulk versus CTD fluorescence - colors represent instrument number
+
+chl_comp %>% 
+  filter(!line_out_depth == 0) %>% 
+  ggplot(aes(x = bulk_chla, y = flu)) + 
+  geom_point(aes(fill = as.factor(ctdNum)), pch = 21, size = 3) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_smooth(method = "lm", color = "black") +
+  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
+  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "CTD Fluor. (ug/L)",
+       fill = "Depth") +
+  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
+  ylim(0, 10) +
+  theme_bw()
+
+#Very interesting trends - CTD fluorescence is much lower than bulk Chl (even with surface removed). Why?
+```
+
+
+
+
+```{r}
+#Plotting scatter of bulk versus HPLC - only at single depth
+
+chl_comp %>% 
+  ggplot(aes(x = bulk_chla, y = all_chl_a)) + 
+  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_smooth(method = "lm", color = "black") +
+  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
+  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "HPLC TChla Chla (ug/L)",
+       fill = "Depth") +
+  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
+  ylim(0, 10) +
+  theme_bw()
+
+#HPLC All Chla is less than half of Bulk Chla. Still don't know what to make of this, but at least strongly correlated.
+```
+```{r}
+#Plotting scatter of HPLC TChla vs Fluorescence.
+
+chl_comp %>% 
+  ggplot(aes(x = all_chl_a, y = flu)) + 
+  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_smooth(method = "lm", color = "black") +
+  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
+  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
+  labs(x = "HPLC TChla Chla (ug/L)",
+       y = "CTD Fluor. (ug/L)",
+       fill = "Depth") +
+  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
+  ylim(0, 10) +
+  theme_bw()
+
+
+```
+
+```{r}
+#Making a time-series plot of bulk chlorophyll separated by depth and colored by acid ratio.
+
+chl %>%
+  filter(line_out_depth < 50 &
+           filter_type == "Bulk GF/F") %>% 
+  ggplot(aes(x = date, y = chla)) + 
+  geom_point(aes(fill = acid_ratio), pch = 21, size = 3) + 
+  geom_line() + 
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  labs(y = "Bulk Chla (ug/L)",
+       fill = "AR") +
+  theme_bw() +
+  theme(text = element_text(size = 25),
+        axis.text = element_text(colour = "black"),
+        axis.title.x = element_blank())
+
+# ggsave(here("figures_qc", "QC_bulk_qu39_depth_TS.png"), 
+#        width = 16, height = 12, dpi=300)
+```
+```{r}
+#Plot timeseries of stacked size fractions. 
+```
+
+```{r}
+#Exporting Bulk chlorophyll data for Kush
+chl_export <- chl_comp %>% 
+  select(date, collected, line_out_depth, bulk_chla)
+
+
+write_csv(chl_export, here("outputs", "bulk_fluorometric_chla.csv"))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
