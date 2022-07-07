@@ -232,9 +232,8 @@ chl_bulk %>%
   facet_grid(line_out_depth ~ .)
 
 #Should add HPLC and fluorescence to this and print for viewing.
-ggsave(here("figures_qc", "timeseries_
-            qu39_bulk.png"),
-        width = 6.5, height = 4.5, dpi = 300)
+ggsave(here("figures_qc", "timeseries_qu39_bulk.png"),
+        width = 16, height = 12, dpi = 300)
 ```
 
 
