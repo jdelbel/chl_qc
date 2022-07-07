@@ -225,16 +225,239 @@ check_bulk_dup_id <- chl_bulk %>%
 chl_bulk %>%
   filter(line_out_depth < 50) %>% 
   ggplot(aes(x = date, y = chla)) +
-  geom_point(aes(fill = chla_flag), pch = 21) +
-  geom_line() +
-  geom_point(data = hplc, aes(x = date, y = all_chl_a), pch = 22, color = "green",
-             alpha = 0.6) +
-  facet_grid(line_out_depth ~ .)
+  geom_point(aes(fill = chla_flag), pch = 21, size = 3.0) +
+  geom_line(size = 1) +
+  geom_point(data = hplc, aes(x = date, y = all_chl_a), pch = 22, fill = "green",
+             alpha = 0.4, size = 3) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+  
 
 #Should add HPLC and fluorescence to this and print for viewing.
 ggsave(here("figures_qc", "timeseries_qu39_bulk.png"),
         width = 16, height = 12, dpi = 300)
 ```
+
+
+
+
+
+
+```{r}
+#Joining HPLC with chlorophyll
+
+chl_bulk <- chl_bulk %>% 
+  left_join(hplc)
+
+```
+```{r}
+#Looking at bulk data - timeseries
+chl_bulk %>%
+  filter(line_out_depth < 50 & is.na(chla_flag) & date > "2019-01-01") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla), pch = 21, size = 3.0) +
+  geom_line(aes(y =chla), size = 1) +
+  geom_point(aes(y = all_chl_a), pch = 22, fill = "green",
+             alpha = 0.4, size = 3) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+  
+
+#Should add HPLC and fluorescence to this and print for viewing.
+ggsave(here("figures_qc", "timeseries_qu39_bulk_no-flag.png"),
+        width = 16, height = 12, dpi = 300)
+```
+```{r}
+#Plotting hplc against bulk chl
+chl_bulk %>% 
+  ggplot(aes(x = all_chl_a, y = chla, fill = chla_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = chla_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0,25) +
+  ylim(0,25) +
+  theme_bw() +
+  theme()
+
+chl_bulk %>% 
+  ggplot(aes(x = log10(all_chl_a), y = log10(chla), fill = chla_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = chla_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  ylim(-2, 2) +
+  theme_bw() +
+  theme()
+
+chl_bulk %>% 
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = log10(all_chl_a), y = log10(chla))) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  ylim(-2, 2) +
+  theme_bw() +
+  theme()
+
+chl_bulk %>% 
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0,25) +
+  ylim(0,25) +
+  theme_bw() +
+  theme()
+
+#Of the data that hasn't been QC'd, there are a few concerning points of very low chla for high TChla.
+
+```
+```{r}
+check_bulk_ar <- chl_bulk %>% 
+  filter(is.na(chla_flag) & acid_ratio < 1.2 & line_out_depth < 50)
+```
+
+```{r}
+#Investigating size-fractionated data for errors.
+
+#Calculating the number of filters for each size-fraction set
+chl_sf <- chl_qc %>% 
+  filter(!filter_type == "Bulk GF/F") %>%
+  filter(!is.na(chla)) %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(filt_num = n()) %>% 
+  ungroup()
+
+#Looking for size fraction sets that have less than 3 filters - 119 observations - I'd imagine a lot of SVC and SVD flags for single filter.
+check_sf_low <- chl_sf %>% 
+  filter(filt_num < 3)
+
+#Looking at size fraction sets that have more than 3 filters. Some are just replicated hakai IDS, but quite a few from zoopsprint - I wonder if one of the GF/Fs is meant to be bulk.
+check_sf_high <- chl_sf %>% 
+  filter(filt_num > 3)
+
+#Subsetting where there are 3 size-fractionated filters. 
+chl_sf <- chl_sf %>% 
+  filter(filt_num == 3)
+
+#Querying replicated filter types within a set - two examples where there are two duplicated filters within a 3 filter set. Only one is not QC'd - check metadata note.
+check_sf_dup <- chl_sf %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique > 1)  
+ 
+
+chl_sf <- chl_sf %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique == 1)
+  
+```
+
+```{r}
+#Calculating the size-fractionated sum for comparison with the bulk
+chl_sf_sum_qcd <- chl_sf %>% 
+  filter(chla_flag == "AV") %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(sf_sum = sum(chla),
+         flag = "AV") %>% 
+  ungroup() %>% 
+  distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
+  select(collected, line_out_depth, sf_sum, flag)
+
+chl_sf_sum_raw <- chl_sf %>% 
+  filter(is.na(chla_flag)) %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(sf_sum = sum(chla),
+         flag = "raw") %>% 
+  ungroup() %>% 
+  distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
+  select(collected, line_out_depth, sf_sum, flag)
+
+chl_sf_sum_join <- rbind(chl_sf_sum_qcd, chl_sf_sum_raw)
+
+
+
+#Removing deep bulk samples for joining with the SF sum.
+
+#Merging with the size-fractionated data for comparison.
+chl_comp <- chl_bulk %>%
+  select(date, collected, line_out_depth, bulk_chla = chla, all_chl_a) %>% 
+  filter(line_out_depth < 99) %>% 
+  left_join(chl_sf_sum_join)
+
+#Looking why there are NAs in join. All from where SF did not have 3 filters in set.
+check_comp_na <- chl_comp %>% 
+  filter(is.na(bulk_chla) | is.na(sf_sum))
+
+
+test <- chl_comp %>% 
+  filter(!is.na(sf_sum)) %>% 
+  mutate(diff = bulk_chla - sf_sum)
+
+test_2 <- chl_qc %>% 
+  filter(date == "2018-03-20" & line_out_depth == 10)
+
+```
+
+
+
+```{r}
+#Plotting sf_sum against bulk chl - Something is up with my join.
+chl_comp %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum, fill = flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0,25) +
+  # ylim(0,25) +
+  theme_bw() +
+  theme()
+
+chl_bulk %>% 
+  ggplot(aes(x = log10(all_chl_a), y = log10(chla), fill = chla_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = chla_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  ylim(-2, 2) +
+  theme_bw() +
+  theme()
+
+chl_bulk %>% 
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = log10(all_chl_a), y = log10(chla))) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  ylim(-2, 2) +
+  theme_bw() +
+  theme()
+
+chl_bulk %>% 
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0,25) +
+  ylim(0,25) +
+  theme_bw() +
+  theme()
+
+#Of the data that hasn't been QC'd, there are a few concerning points of very low chla for high TChla.
+
+```
+
+
+
 
 
 ```{r}
@@ -253,38 +476,7 @@ chl_bulk %>%
 
 
 
-```{r}
-#Investigating size-fractionated data for errors.
 
-#Calculating the number of filters for each size-fraction set
-chl_sf <- chl %>% 
-  filter(!filter_type == "Bulk GF/F") %>%
-  filter(!is.na(chla)) %>% 
-  group_by(collected, line_out_depth) %>% 
-  mutate(filt_num = n()) %>% 
-  ungroup()
-
-#Looking for size fraction sets that have less than 3 filters - 8 observations, 4 sets of two (aligns with 4 NAS)
-check_sf_low <- chl_sf %>% 
-  filter(filt_num < 3)
-
-#Looking at size fraction sets that have more than 3 filters. 0.
-check_sf_high <- chl_sf %>% 
-  filter(filt_num > 3)
-
-#Subsetting where there are 3 size-fractionated filters. 
-chl_sf <- chl_sf %>% 
-  filter(filt_num == 3)
-
-#Querying replicated filter types within a set - capturing where 3 filters, but two are replicated. 0.
-check_sf_dup <- chl_sf %>% 
-  group_by(collected, line_out_depth, filter_type) %>% 
-  mutate(filt_unique = n()) %>% 
-  ungroup() %>% 
-  filter(filt_unique > 1)
-
-#The size-fractionated data looks good.
-```
 
 ```{r}
 #Calculating the size-fractionated sum for comparison with the bulk
