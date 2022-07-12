@@ -241,11 +241,6 @@ ggsave(here("figures_qc", "timeseries_qu39_bulk.png"),
         width = 16, height = 12, dpi = 300)
 ```
 
-
-
-
-
-
 ```{r}
 #Joining HPLC with chlorophyll
 
@@ -275,6 +270,8 @@ ggsave(here("figures_qc", "timeseries_qu39_bulk_no-flag.png"),
 ```
 ```{r}
 #Plotting hplc against bulk chl
+
+#Plotting all data with ADL flags a separate group with a separate regression line
 chl_bulk %>% 
   ggplot(aes(x = all_chl_a, y = chla, fill = chla_flag)) +
   geom_point(pch = 21, size = 3.0) +
@@ -284,7 +281,11 @@ chl_bulk %>%
   ylim(0,25) +
   theme_bw() +
   theme()
+```
 
+
+```{r}
+#Same plot as above but in log10 scale
 chl_bulk %>% 
   ggplot(aes(x = log10(all_chl_a), y = log10(chla), fill = chla_flag)) +
   geom_point(pch = 21, size = 3.0) +
@@ -293,17 +294,8 @@ chl_bulk %>%
   ylim(-2, 2) +
   theme_bw() +
   theme()
-
-chl_bulk %>% 
-  filter(is.na(chla_flag)) %>% 
-  ggplot(aes(x = log10(all_chl_a), y = log10(chla))) +
-  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm', color = "red", fill = "red") +
-  geom_abline(intercept = 0, slope = 1) +
-  ylim(-2, 2) +
-  theme_bw() +
-  theme()
-
+```
+```{r}
 chl_bulk %>% 
   filter(is.na(chla_flag)) %>% 
   ggplot(aes(x = all_chl_a, y = chla)) +
@@ -318,7 +310,50 @@ chl_bulk %>%
 #Of the data that hasn't been QC'd, there are a few concerning points of very low chla for high TChla.
 
 ```
+
 ```{r}
+
+#Plotting only un-QC'd data and coloring by whether the acid ratio is <1.2 - log10 scale
+chl_bulk %>% 
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = log10(all_chl_a), y = log10(chla))) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  ylim(-2, 2) +
+  theme_bw() +
+  theme()
+```
+
+```{r}
+chl_bulk <- chl_bulk %>% 
+  mutate(analyzed_date = lubridate::date(analyzed)) %>% 
+  relocate(analyzed_date, .after = analyzed)
+
+
+chl_bulk %>% 
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~ as.factor(analyzed_date), scales = "free") +
+  xlim(0,25) +
+  ylim(0,25) +
+  theme_bw() +
+  theme()
+
+ggsave(here("figures_qc", "test.png"),
+        width = 16, height = 12, dpi = 300)
+
+```
+
+
+
+
+
+```{r}
+#Looking at samples that were collected in the surface waters and have low acid ratios.
 check_bulk_ar <- chl_bulk %>% 
   filter(is.na(chla_flag) & acid_ratio < 1.2 & line_out_depth < 50)
 ```
@@ -364,73 +399,74 @@ chl_sf <- chl_sf %>%
 
 ```{r}
 #Calculating the size-fractionated sum for comparison with the bulk
-chl_sf_sum_qcd <- chl_sf %>% 
-  filter(chla_flag == "AV") %>% 
+chl_sf_sum <- chl_sf %>% 
+  filter(chla_flag == "AV" | chla_flag == "ADL" | is.na(chla_flag)) %>% 
   group_by(collected, line_out_depth) %>% 
-  mutate(sf_sum = sum(chla),
-         flag = "AV") %>% 
+  mutate(sf_sum = sum(chla)) %>% 
   ungroup() %>% 
   distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
-  select(collected, line_out_depth, sf_sum, flag)
-
-chl_sf_sum_raw <- chl_sf %>% 
-  filter(is.na(chla_flag)) %>% 
-  group_by(collected, line_out_depth) %>% 
-  mutate(sf_sum = sum(chla),
-         flag = "raw") %>% 
-  ungroup() %>% 
-  distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
-  select(collected, line_out_depth, sf_sum, flag)
-
-chl_sf_sum_join <- rbind(chl_sf_sum_qcd, chl_sf_sum_raw)
-
-
-
-#Removing deep bulk samples for joining with the SF sum.
+  select(collected, line_out_depth, sf_sum)
 
 #Merging with the size-fractionated data for comparison.
 chl_comp <- chl_bulk %>%
-  select(date, collected, line_out_depth, bulk_chla = chla, all_chl_a) %>% 
+  select(date, collected, line_out_depth, bulk_chla = chla,
+         bulk_flag = chla_flag, all_chl_a) %>% 
   filter(line_out_depth < 99) %>% 
-  left_join(chl_sf_sum_join)
+  left_join(chl_sf_sum)
 
 #Looking why there are NAs in join. All from where SF did not have 3 filters in set.
 check_comp_na <- chl_comp %>% 
   filter(is.na(bulk_chla) | is.na(sf_sum))
 
-
-test <- chl_comp %>% 
-  filter(!is.na(sf_sum)) %>% 
-  mutate(diff = bulk_chla - sf_sum)
-
-test_2 <- chl_qc %>% 
-  filter(date == "2018-03-20" & line_out_depth == 10)
-
 ```
-
-
 
 ```{r}
 #Plotting sf_sum against bulk chl - Something is up with my join.
 chl_comp %>% 
-  ggplot(aes(x = bulk_chla, y = sf_sum, fill = flag)) +
+  ggplot(aes(x = bulk_chla, y = sf_sum, fill = bulk_flag)) +
   geom_point(pch = 21, size = 3.0) +
-  geom_smooth(aes(color = flag), method = 'lm') +
+  geom_smooth(aes(color = bulk_flag), method = 'lm') +
   geom_abline(intercept = 0, slope = 1) +
-  # xlim(0,25) +
-  # ylim(0,25) +
+  xlim(0, 30) +
+  ylim(0, 30) +
   theme_bw() +
   theme()
 
+#To me this looks pretty darn good - the samples with ADL may have a trend to higher size fractionated sum at higher concentrations.
+
+#Maybe one sample here that should be checked for havin low bulk concentration
+
+```
+
+```{r}
+chl_comp %>% 
+  ggplot(aes(x = log10(bulk_chla), y = log10(sf_sum), fill = bulk_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = bulk_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0, 30) +
+  # ylim(0, 30) +
+  theme_bw() +
+  theme()
+```
+
+```{r}
 chl_bulk %>% 
-  ggplot(aes(x = log10(all_chl_a), y = log10(chla), fill = chla_flag)) +
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(aes(color = chla_flag), method = 'lm') +
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
   geom_abline(intercept = 0, slope = 1) +
-  ylim(-2, 2) +
+  xlim(0,30) +
+  ylim(0,30) +
   theme_bw() +
   theme()
 
+#Definitely some disperson here, but doesn't seem to be more than expected
+
+```
+
+```{r}
 chl_bulk %>% 
   filter(is.na(chla_flag)) %>% 
   ggplot(aes(x = log10(all_chl_a), y = log10(chla))) +
@@ -440,21 +476,34 @@ chl_bulk %>%
   ylim(-2, 2) +
   theme_bw() +
   theme()
-
-chl_bulk %>% 
-  filter(is.na(chla_flag)) %>% 
-  ggplot(aes(x = all_chl_a, y = chla)) +
-  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm', color = "red", fill = "red") +
-  geom_abline(intercept = 0, slope = 1) +
-  xlim(0,25) +
-  ylim(0,25) +
+```
+```{r}
+#Looking at bulk data - timeseries
+chl_comp %>%
+  filter(line_out_depth < 50 & is.na(bulk_flag) & date > "2019-01-01") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = bulk_chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = bulk_chla), size = 1) +
+  geom_point(aes(y = sf_sum), pch = 21, size = 3.0, color = "red") +
+  geom_line(aes(y = sf_sum), size = 1, color = "red") +
+  geom_point(aes(y = all_chl_a), pch = 22, fill = "green",
+             alpha = 0.4, size = 3) +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
   theme_bw() +
-  theme()
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+  
 
-#Of the data that hasn't been QC'd, there are a few concerning points of very low chla for high TChla.
+#Should add HPLC and fluorescence to this and print for viewing.
+ggsave(here("figures_qc", "timeseries_qu39_bulk-SF_no-flag.png"),
+        width = 16, height = 12, dpi = 300)
+
+#Everything looks pretty spot on.
 
 ```
+
+
 
 
 
