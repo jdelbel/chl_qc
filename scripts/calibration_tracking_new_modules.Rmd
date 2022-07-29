@@ -1,0 +1,163 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Seems like the linear regressions are comparable when a zero point is added for the blank, but not when the R model is pushed through zero. I need to make some changes to this work book, but it is valuable and I should improve for reporting purposes.
+
+This script is meant to track the Trilogy benchtop chlorophyll fluorometer calibrations. Issues with historical calibrations are also diagnosed.
+
+```{r}
+#Load packages
+library(tidyverse)
+library(readxl)
+library(here)
+library(broom)
+library(patchwork)
+```
+
+```{r}
+#Upload calibration sheet
+cali_point <- read_xlsx(here("files",
+                             "cali_summary_2022-07_29_new_modules.xlsx"), 
+                  sheet = "standard_curve")
+
+cali <- read_xlsx(here("files",
+                             "cali_summary_2022-07_29_new_modules.xlsx"), 
+                  sheet = "summary")
+
+```
+
+```{r}
+#Reducing number of decimal places for plotting of r2
+cali <- cali %>% 
+  mutate_at(vars(r2), funs(round(., 4)))
+```
+
+```{r}
+p1 <- cali %>% 
+  filter(Fluorometer == 720000982) %>% 
+  ggplot(aes(factor(Date), slope*10000, fill = Lab)) +
+  geom_point(size = 6, pch = 21, color = "black") +
+  geom_text(aes(label = r2), vjust = - 0.8, size = 7) +
+  theme_bw() +
+  coord_cartesian(ylim = c(3, 5)) +
+  labs(title = "Instrument #0982",
+       y = bquote("Cali. Slope * 10k (# =" ~ r^2*")"),
+         "Calibration Slope (# = R2)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = c(0.21, 0.89),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        # axis.title.y = element_blank(),
+        # axis.text.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black")) 
+
+p2 <- cali %>% 
+  filter(Fluorometer == 720001154) %>% 
+  ggplot(aes(factor(Date), slope*10000, fill = Lab)) +
+  geom_point(size = 6, pch = 21, color = "black") +
+  geom_text(aes(label = r2), vjust = - 0.8, size = 7) +
+  # scale_fill_manual(breaks = c("Hakai-Quadra", "DFO"),
+  #                   values = c("#4DAF4A", "#E41A1C")) +
+  theme_bw() +
+  coord_cartesian(ylim = c(3, 5)) +
+  labs(title = "Instrument #1154",
+       y = bquote("Calibration Slope (# =" ~ r^2*")"),
+         "Calibration Slope (# = R2)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black")) 
+
+p3 <- cali %>% 
+  filter(Fluorometer == 720000982) %>%
+  ggplot(aes(factor(Date), fm, fill = Lab)) +
+  geom_bar(stat = "identity", color = "Black", size = 1,
+           width = 0.6) + 
+  theme_bw() +
+  coord_cartesian(ylim = c(1.65, 1.90)) +
+  labs(y = "Acid Ratio (fm)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        text = element_text(size = 30),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        # axis.title.y = element_blank(),
+        # axis.text.y = element_blank(),
+        axis.text = element_text(colour = "black")) 
+
+p4 <- cali %>% 
+  filter(Fluorometer == 720001154) %>%
+  ggplot(aes(factor(Date), fm, fill = Lab)) +
+  geom_bar(stat = "identity", color = "Black", size = 1,
+           width = 0.6) + 
+  theme_bw() +
+  coord_cartesian(ylim = c(1.65, 1.90)) +
+  labs(y = "Acid Ratio (fm)",
+       x = "Cali. Date") +
+  # scale_fill_manual(breaks = c("Hakai-Quadra", "DFO"),
+  #                   values = c("#4DAF4A", "#E41A1C")) +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        text = element_text(size = 30),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text = element_text(colour = "black"))
+  
+fig <- p1 + p2 + p3 + p4 + 
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 30))
+
+ggsave(here("figures", "calibration_summary_new_modules.png"), 
+       fig, width = 16, height = 15, dpi = 300)
+```
+
+```{r}
+cali_point %>% 
+  ggplot(aes(x = chl, y = rb/100000, fill = as.factor(date))) +
+  geom_point(pch = 21, size = 3, stroke = 1.5) +
+  geom_smooth(aes(color = as.factor(date)), method = "lm") +
+  facet_grid(. ~ as.factor(fluorometer)) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(x = "Chla (ug/L)",
+       y = "Instrument Raw/100k (RFU)",
+       fill = "Cali. Date",
+       color = "Cali. Date") +
+  theme_bw() +
+  theme(legend.position = c(0.1, 0.9),
+        legend.background = element_blank(),
+        text = element_text(size = 25),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(colour = "black"))
+
+ggsave(here("figures", "calibration_curve_new_modules.png"), 
+       width = 10.5, height = 6, dpi = 300)  
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
