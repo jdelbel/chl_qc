@@ -143,13 +143,14 @@ check_ar <- chl %>%
 
 #Plotting depths with low acid ratio - all bulk samples from > 100m (expected) 
 check_ar %>% 
+  filter(is.na(chla_flag)) %>% 
   ggplot(aes(x = as.factor(line_out_depth), fill = filter_type)) +
   geom_bar(stat = "count", position = "stack") +
   labs(x = "depth",
        y = "count") +
   theme_bw()
 
-
+#Need to look into these samples - No bulks until 10m. Some 20um at 5 and 10m which is weird.
 ```
 ```{r}
 #checking samples that were diluted. Need to determine when we started doing this.
@@ -174,12 +175,6 @@ chl_av <- chl %>%
   filter(chla_flag == "AV")
 
 ```
-
-
-
-
-
-
 
 
 ```{r}
@@ -279,8 +274,13 @@ chl_bulk %>%
   geom_abline(intercept = 0, slope = 1) +
   xlim(0,25) +
   ylim(0,25) +
+  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
   theme_bw() +
   theme()
+
+#Very odd trend as it would be expected that samples that weren't diluted would saturate the fluorometer and result in lower chla per HPLC TChla. Here the values are higher, although the trend line is <1, so higher values would go below 1:1 line and underpredict.
+
+#The new HPLC to chla with the diluted samples has 1:1 slope. Never had this before.
 ```
 
 
@@ -294,6 +294,8 @@ chl_bulk %>%
   ylim(-2, 2) +
   theme_bw() +
   theme()
+
+#Definitely some outlier samples here that could have issues
 ```
 ```{r}
 chl_bulk %>% 
@@ -324,6 +326,19 @@ chl_bulk %>%
   theme_bw() +
   theme()
 ```
+```{r}
+#I want to isolate these two samples with low ARs
+check_bulk_ar_2 <- chl_bulk %>% 
+  filter(is.na(chla_flag) & !is.na(all_chl_a) & acid_ratio < 1.2 &
+           line_out_depth < 50)
+
+#These are the two points showing up in the above plot.
+```
+
+
+
+
+
 
 ```{r}
 chl_bulk <- chl_bulk %>% 
@@ -337,7 +352,7 @@ chl_bulk %>%
   geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
   geom_smooth(method = 'lm', color = "red", fill = "red") +
   geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~ as.factor(analyzed_date), scales = "free") +
+  facet_wrap(~ as.factor(analyzed_date), scales = "free" ) +
   xlim(0,25) +
   ylim(0,25) +
   theme_bw() +
@@ -347,9 +362,6 @@ ggsave(here("figures_qc", "test.png"),
         width = 16, height = 12, dpi = 300)
 
 ```
-
-
-
 
 
 ```{r}
@@ -409,7 +421,7 @@ chl_sf_sum <- chl_sf %>%
 
 #Merging with the size-fractionated data for comparison.
 chl_comp <- chl_bulk %>%
-  select(date, collected, line_out_depth, bulk_chla = chla,
+  select(date, collected, analyzed_date, line_out_depth, bulk_chla = chla,
          bulk_flag = chla_flag, all_chl_a) %>% 
   filter(line_out_depth < 99) %>% 
   left_join(chl_sf_sum)
@@ -501,225 +513,106 @@ ggsave(here("figures_qc", "timeseries_qu39_bulk-SF_no-flag.png"),
 
 #Everything looks pretty spot on.
 
-```
-
-
-
-
-
-
-
-```{r}
-#Looking at bulk data - box plot - sort of cool, but hard to see. Maybe if I print it would be better.
-chl_bulk %>%
-  filter(line_out_depth < 50) %>% 
-  ggplot(aes(x = as.factor(month), y = chla)) +
-  geom_boxplot() +
-  geom_jitter(aes(fill = chla_flag), pch = 21) +
-  facet_grid(line_out_depth ~ .)
+#there is a single 5m point where HPLC shows an early bloom, but there is not corresponding increase in any of the other variables.
 
 ```
 
-
-
-
-
-
-
-
 ```{r}
-#Calculating the size-fractionated sum for comparison with the bulk
-chl_sf_sum <- chl_sf %>% 
-  group_by(collected, line_out_depth) %>% 
-  mutate(sf_sum = sum(chla)) %>% 
-  ungroup() %>% 
-  distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
-  select(collected, line_out_depth, sf_sum)
-
-#Removing deep bulk samples for joining with the SF sum.
-
-#Merging with the size-fractionated data for comparison.
-chl_comp <- chl_bulk %>%
-  select(date, collected, line_out_depth, bulk_chla = chla) %>% 
-  filter(line_out_depth < 99) %>% 
-  left_join(chl_sf_sum)
-
-#Looking why there are NAs in join. All from where SF did not have 3 filters in set.
-check_comp_na <- chl_comp %>% 
-  filter(is.na(bulk_chla) | is.na(sf_sum))
-
-#Now joining with hplc
-chl_comp <- chl_comp %>% 
-  left_join(hplc)
-
-#Now joining with CTD fluorescence.
-
-#First altering CTD file to make it comparable to the bottle data, which includes changing 1m pressure to 0m depth for joining with surface bottle data.
-ctd_join <- ctd %>% 
-  select(date, ctdNum, line_out_depth = pres, flu) %>% 
-  mutate(line_out_depth = case_when(line_out_depth == 1 ~ 0,
-                           TRUE ~ as.numeric(line_out_depth)))
-
-chl_comp <- chl_comp %>% 
-  left_join(ctd_join)
-
-#Filter comparison looks good
-```
-
-```{r}
-#Plotting scatter of bulk versus SF sum concentrations
 
 chl_comp %>% 
-  ggplot(aes(x = bulk_chla, y = sf_sum)) + 
-  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_smooth(method = "lm", color = "black") +
-  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
-  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
-  labs(x = "Bulk Chla (ug/L)",
-       y = "SF-Sum Chla (ug/L)",
-       fill = "Depth") +
-  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
-  ylim(0, 10) +
-  theme_bw()
-
-#Comparison of bulk and SF sum looks normal. SF underestimates bulk, notably at high concentrations.
-```
-```{r}
-#Plotting scatter of bulk versus CTD fluorescence
-
-chl_comp %>% 
-  ggplot(aes(x = bulk_chla, y = flu)) + 
-  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_smooth(method = "lm", color = "black") +
-  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
-  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
-  labs(x = "Bulk Chla (ug/L)",
-       y = "CTD Fluor. (ug/L)",
-       fill = "Depth") +
-  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
-  ylim(0, 10) +
-  theme_bw()
-
-#Very interesting trends - CTD fluorescence is much lower than Bulk chlorophyll?
-```
-```{r}
-#Plotting scatter of bulk versus CTD fluorescence - without surface samples
-
-chl_comp %>% 
-  filter(!line_out_depth == 0) %>% 
-  ggplot(aes(x = bulk_chla, y = flu)) + 
-  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_smooth(method = "lm", color = "black") +
-  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
-  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
-  labs(x = "Bulk Chla (ug/L)",
-       y = "CTD Fluor. (ug/L)",
-       fill = "Depth") +
-  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
-  ylim(0, 10) +
-  theme_bw()
-
-#Very interesting trends - CTD fluorescence is much lower than bulk Chl (even with surface removed). Why?
-```
-```{r}
-#Plotting scatter of bulk versus CTD fluorescence - colors represent instrument number
-
-chl_comp %>% 
-  filter(!line_out_depth == 0) %>% 
-  ggplot(aes(x = bulk_chla, y = flu)) + 
-  geom_point(aes(fill = as.factor(ctdNum)), pch = 21, size = 3) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_smooth(method = "lm", color = "black") +
-  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
-  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
-  labs(x = "Bulk Chla (ug/L)",
-       y = "CTD Fluor. (ug/L)",
-       fill = "Depth") +
-  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
-  ylim(0, 10) +
-  theme_bw()
-
-#Very interesting trends - CTD fluorescence is much lower than bulk Chl (even with surface removed). Why?
-```
-
-
-
-
-```{r}
-#Plotting scatter of bulk versus HPLC - only at single depth
-
-chl_comp %>% 
-  ggplot(aes(x = bulk_chla, y = all_chl_a)) + 
-  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_smooth(method = "lm", color = "black") +
-  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
-  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
-  labs(x = "Bulk Chla (ug/L)",
-       y = "HPLC TChla Chla (ug/L)",
-       fill = "Depth") +
-  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
-  ylim(0, 10) +
-  theme_bw()
-
-#HPLC All Chla is less than half of Bulk Chla. Still don't know what to make of this, but at least strongly correlated.
-```
-```{r}
-#Plotting scatter of HPLC TChla vs Fluorescence.
-
-chl_comp %>% 
-  ggplot(aes(x = all_chl_a, y = flu)) + 
-  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 3) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_smooth(method = "lm", color = "black") +
-  ggpubr::stat_cor(aes(label = ..rr.label..), label.y = 9, size = 8) +
-  ggpubr::stat_regline_equation(label.y = 10, size = 8) +
-  labs(x = "HPLC TChla Chla (ug/L)",
-       y = "CTD Fluor. (ug/L)",
-       fill = "Depth") +
-  xlim(0, 10) + #Make sure to check data range and change these limits to include all data
-  ylim(0, 10) +
-  theme_bw()
-
-
-```
-
-```{r}
-#Making a time-series plot of bulk chlorophyll separated by depth and colored by acid ratio.
-
-chl %>%
-  filter(line_out_depth < 50 &
-           filter_type == "Bulk GF/F") %>% 
-  ggplot(aes(x = date, y = chla)) + 
-  geom_point(aes(fill = acid_ratio), pch = 21, size = 3) + 
-  geom_line() + 
-  facet_grid(line_out_depth ~ ., scales = "free_y") +
-  labs(y = "Bulk Chla (ug/L)",
-       fill = "AR") +
+  filter(is.na(bulk_flag)) %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  facet_wrap(~ (as.factor(analyzed_date)), scales = "free" ) +
   theme_bw() +
-  theme(text = element_text(size = 25),
-        axis.text = element_text(colour = "black"),
-        axis.title.x = element_blank())
+  theme()
 
-# ggsave(here("figures_qc", "QC_bulk_qu39_depth_TS.png"), 
-#        width = 16, height = 12, dpi=300)
-```
-```{r}
-#Plot timeseries of stacked size fractions. 
+ggsave(here("figures_qc", "test2.png"),
+        width = 16, height = 12, dpi = 300)
+
 ```
 
 ```{r}
-#Exporting Bulk chlorophyll data for Kush
-chl_export <- chl_comp %>% 
-  select(date, collected, line_out_depth, bulk_chla)
+#Looking at specific samples that were left in TULA freezer for extended period
+chl_bulk %>% 
+  filter(date == "2021-05-18") %>% 
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0, 1) +
+  # ylim(0, 1) +
+  theme_bw() +
+  theme()
+
+test <- chl_bulk %>% 
+  filter(date == "2021-05-18") 
 
 
-write_csv(chl_export, here("outputs", "bulk_fluorometric_chla.csv"))
-
+#Looking at specific samples that were left in TULA freezer for extended period
+chl_comp %>% 
+  filter(date == "2020-08-04") %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0, 5) +
+  # ylim(0, 5) +
+  theme_bw() +
+  theme()
 ```
+
+```{r}
+#Let's plot the entire SF timeseries
+#Order phytoplankton groups roughly from smallest to largest - create order list
+
+order_sf <- c("GF/F", "3um", "20um")
+
+#Chemtax - Specify order of phyto groups for figures
+chl_sf <- arrange(mutate(chl_sf, filter_type = factor(filter_type,
+                                              levels = order_sf)))
+
+
+chl_sf %>%
+  ggplot(aes(x = date, y = chla, fill = filter_type)) + 
+  geom_area() +
+  scale_fill_brewer(palette = "Greens", labels = c(expression(Pico[CHL]),
+                                                   expression(Nano[CHL]),
+                                                   expression(Micro[CHL]))) +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  theme_bw()
+
+ggsave(here("figures_qc", "SF_test.png"),
+        width = 16, height = 12, dpi = 300)
+
+
+#Some issues with plotting need to be investigated.
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
