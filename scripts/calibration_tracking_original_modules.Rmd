@@ -1,0 +1,151 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Seems like the linear regressions are comparable when a zero point is added for the blank, but not when the R model is pushed through zero. I need to make some changes to this work book, but it is valuable and I should improve for reporting purposes.
+
+This script is meant to track the Trilogy benchtop chlorophyll fluorometer calibrations. Issues with historical calibrations are also diagnosed.
+
+```{r}
+#Load packages
+library(tidyverse)
+library(readxl)
+library(here)
+library(broom)
+library(patchwork)
+```
+
+```{r}
+#Upload calibration sheet
+cali <- read_xlsx(here("files", "cali_summary_2022-04-06.xlsx"))
+
+```
+
+```{r}
+#Reducing number of decimal places for plotting of r2
+cali <- cali %>% 
+  mutate_at(vars(r2), funs(round(., 4)))
+```
+
+```{r}
+p1 <- cali %>% 
+  filter(Fluorometer == 720000982) %>% 
+  ggplot(aes(factor(Date), slope*10000, fill = Lab)) +
+  geom_point(size = 6, pch = 21, color = "black") +
+  geom_text(aes(label = r2), vjust = - 0.8, size = 7) +
+  theme_bw() +
+  coord_cartesian(ylim = c(4, 7)) +
+  annotate("text", x = 3.6, y = 4.7,
+           label = "Pre-DFO Test calibration", size = 6, angle = 90) +
+  annotate("rect", xmin = 3.5, xmax = 4.5, ymin = 3, ymax = 8, 
+           alpha = 0.2, fill = "red") +
+  labs(title = "Instrument #0982",
+       y = bquote("Cali. Slope * 10k (# =" ~ r^2*")"),
+         "Calibration Slope (# = R2)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = c(0.21, 0.18),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        # axis.title.y = element_blank(),
+        # axis.text.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black")) 
+
+p2 <- cali %>% 
+  filter(Fluorometer == 720001154) %>% 
+  ggplot(aes(factor(Date), slope*10000, fill = Lab)) +
+  geom_point(size = 6, pch = 21, color = "black") +
+  geom_text(aes(label = r2), vjust = - 0.8, size = 7) +
+  scale_fill_manual(breaks = c("Hakai-Quadra", "DFO"),
+                    values = c("#4DAF4A", "#E41A1C")) +
+  theme_bw() +
+  coord_cartesian(ylim = c(4, 7)) +
+  annotate("rect", xmin = 5.5, xmax = 6.5, ymin = 3, ymax = 8, 
+           alpha = 0.2, fill = "red") +
+  annotate("rect", xmin = 8.5, xmax = 9.5, ymin = 3, ymax = 8, 
+           alpha = 0.2, fill = "blue") +
+  annotate("text", x = 8.6, y = 6.4,
+           label = "Hakai DFO methods", size = 6, angle = 90) +
+  labs(title = "Instrument #1154",
+       y = bquote("Calibration Slope (# =" ~ r^2*")"),
+         "Calibration Slope (# = R2)",
+       x = "Cali. Date") +
+  # scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        text = element_text(size = 30),
+        axis.text = element_text(colour = "black")) 
+
+p3 <- cali %>% 
+  filter(Fluorometer == 720000982) %>%
+  ggplot(aes(factor(Date), fm, fill = Lab)) +
+  geom_bar(stat = "identity", color = "Black", size = 1,
+           width = 0.6) + 
+  theme_bw() +
+  coord_cartesian(ylim = c(1.65, 1.90)) +
+  annotate("rect", xmin = 3.5, xmax = 4.5, ymin = 1, ymax = 2, 
+           alpha = 0.2, fill = "red") +
+  labs(y = "Acid Ratio (fm)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        text = element_text(size = 30),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        # axis.title.y = element_blank(),
+        # axis.text.y = element_blank(),
+        axis.text = element_text(colour = "black")) 
+
+p4 <- cali %>% 
+  filter(Fluorometer == 720001154) %>%
+  ggplot(aes(factor(Date), fm, fill = Lab)) +
+  geom_bar(stat = "identity", color = "Black", size = 1,
+           width = 0.6) + 
+  theme_bw() +
+  coord_cartesian(ylim = c(1.65, 1.90)) +
+  annotate("rect", xmin = 8.5, xmax = 9.5, ymin = 1, ymax = 2, 
+           alpha = 0.2, fill = "blue") +
+  annotate("rect", xmin = 5.5, xmax = 6.5, ymin = 1, ymax = 2, 
+           alpha = 0.2, fill = "red") +
+  labs(y = "Acid Ratio (fm)",
+       x = "Cali. Date") +
+  scale_fill_manual(breaks = c("Hakai-Quadra", "DFO"),
+                    values = c("#4DAF4A", "#E41A1C")) +
+  theme(legend.position = "none",
+        text = element_text(size = 30),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text = element_text(colour = "black"))
+  
+fig <- p1 + p2 + p3 + p4 + 
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 30))
+
+ggsave(here("figures", "slope_fm_compare_summary3.png"), 
+       fig, width = 16, height = 15, dpi = 300)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
