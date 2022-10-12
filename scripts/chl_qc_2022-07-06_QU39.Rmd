@@ -3,9 +3,9 @@ title: "Chlorophyll QC"
 output: html_notebook
 ---
 
-This notebook is being made to start a chlorophyll QC process for new incoming samples. Comparisons will be made for the entire timeseries to look for unusual concentrations.
+This notebook is being made to start a chlorophyll QC process for new incoming samples. 
 
-This is currently configured to only QC new data, but it would be good to have all the data from the timeseries to compare new data with long term trends. Just tricky because there are a lot of errors to sift through in the old data (i.e. lots of duplicates, missing records etc. that complicate the checks.)
+This is currently configured to only QC new data, but it would be good to have all the data from the time-series to compare new data with long term trends. Just tricky because there are a lot of errors to sift through in the old data (i.e. lots of duplicates, missing records etc. that complicate the checks.)
 
 ```{r}
 #Upload packages
@@ -16,22 +16,13 @@ library(readxl)
 ```
 
 ```{r}
-#Upload chl dataset - entire dataset downloaded from the portal on 2022-01-04
-chl <- read_csv(here("files", "qu39_2022-07-06.csv"))
+#Upload chl dataset - entire QU39 dataset downloaded from the portal on 2022-10-12
+chl <- read_csv(here("files", "qu39_2022-10-12.csv"))
 
-#Upload HPLC data
+#Upload HPLC data - entire QU39 dataset downloaded from the portal on 2022-0706
 hplc <- read_csv(here("files", "qu39_hplc_2022-07-06.csv"))
 
-#Upload CTD data
-# ctd <- read_excel(here("files", "qcs01-2022-04-20_ctd.xlsx"),
-#                       sheet = "Data")
-
-#Upload CTD metadata from drops sheet in portal excel download
-# ctd_meta <- read_excel(here("files",  "qcs01-2022-04-20_ctd.xlsx"),
-#                       sheet = "Drops")
-
 ```
-
 
 ```{r}
 #Selecting relevant columns
@@ -55,11 +46,11 @@ chl <- chl %>%
   ungroup() %>% 
   mutate(acid_ratio = before_acid/after_acid)
 
-#Pulling out duplicates - alot. Some have different Hakai IDs, but have same metadata with one being analyzed and the other not - I think DFO crosse comparison samples.
+#Pulling out duplicates - 33 records. Samples collected on 2022-04-12 were replicate samples with some being sent to DFO (19 records)
 check_dup <- chl %>% 
   filter(rep > 1)
 
-#these are the samples with duplicate hakai IDs. These are the bigger problem
+#No samples anymore with duplicate Hakai ID.
 check_dup_id <- chl %>% 
   filter(rep_id > 1)
 
@@ -115,16 +106,20 @@ hplc <- hplc %>%
 check_depth <- chl %>% 
   distinct(line_out_depth, filter_type)
 
-#Looking at calibrations applied to data - doesn't look like recent calibrations have been applied - what's the newest data uploaded -  it should have the new information
+#Looking at calibrations applied to data - there are some records with NA calibrations
 check_cali <- chl %>% 
   distinct(calibration, acid_ratio_correction_factor, acid_coefficient,
            calibration_slope)
 
-#Looking for negative values - lots - most are flagged already. Some interesting things to look for here.
+#Looking at calibrations that have NA calibration - 308 samples. Many historical and were never analyzed
+check_cali_na <- chl %>% 
+  filter(is.na(calibration))
+
+#Looking for negative values - lots (105 records), including unflagged data.
 check_neg <- chl %>% 
   filter(chla < 0 | phaeo < 0)
 
-#There are lots and I need to investigate this.
+#There are lots and I need to investigate this - same output as samples that weren't 
 check_na <- chl %>% 
   filter(is.na(chla) | is.na(phaeo))
 
@@ -132,29 +127,32 @@ check_na <- chl %>%
 check_flag <- chl %>% 
   filter(!is.na(chla_flag) | !is.na(phaeo_flag))
 
-#Checking acid flag - sometimes the crew flags suspect data here rather than directly applying flags
-#Currently 20 records from a single day where the chlorophyll blanks were higher than usual.
+#Checking acid flag 
 check_acid_flag <- chl %>% 
   filter(!is.na(acid_flag))
 
 #Looking for filters with low acid ratios -  quite a few for data that hasn't been flagged yet.
 check_ar <- chl %>% 
   filter(acid_ratio < 1.2)
+```
 
+
+```{r}
 #Plotting depths with low acid ratio - all bulk samples from > 100m (expected) 
 check_ar %>% 
   filter(is.na(chla_flag)) %>% 
   ggplot(aes(x = as.factor(line_out_depth), fill = filter_type)) +
-  geom_bar(stat = "count", position = "stack") +
+  geom_bar(stat = "count", position = "stack", color = "Black") +
   labs(x = "depth",
        y = "count") +
   theme_bw()
 
 #Need to look into these samples - No bulks until 10m. Some 20um at 5 and 10m which is weird.
 ```
+
+
 ```{r}
 #checking samples that were diluted. Need to determine when we started doing this.
-
 check_dilution <- chl %>% 
   filter(dilution_factor > 1)
 
@@ -165,9 +163,9 @@ check_adl <- chl %>%
 
 
 ```{r}
-#Pulling out all samples that haven't been QC'd -  for now removing samples that were not analyzed post 2022 on the new module. 
+#Pulling out all samples that haven't been QC'd on the new module. 
 chl_qc <- chl %>% 
-  filter(!is.na(analyzed) & analyzed < "2022-01-01" & 
+  filter(!is.na(analyzed) &
            (is.na(chla_flag) | chla_flag == "AV" | chla_flag == "ADL"))
 
 #Pulling out all QC'd data
@@ -184,7 +182,7 @@ chl_av <- chl %>%
 chl_bulk <- chl_qc %>% 
   filter(filter_type == "Bulk GF/F")
 
-#Making a column showing if there are replicated filters.
+#Making a column showing if there are replicated filters by day, collected time and Hakai ID
 chl_bulk <- chl_bulk %>% 
   group_by(date, line_out_depth) %>% 
   mutate(dup_day = n()) %>%
@@ -196,23 +194,19 @@ chl_bulk <- chl_bulk %>%
   mutate(dup_id = n()) %>%
   ungroup()
 
-#Querying duplicated bulk records. 0.
+#Looking for samples collected on the same day - lots because of zoopsprint samples
 check_bulk_dup_day <- chl_bulk %>% 
   filter(dup_day > 1)
 
+#Looking for samples that have the same collected time
 check_bulk_dup_samp <- chl_bulk %>% 
   filter(dup_sample > 1)
 
 check_bulk_dup_id <- chl_bulk %>% 
   filter(dup_id > 1)
 
-#So lots of duplicates where multiple programs went out on a single day, but only one sample that is an exact replicate/duplicate
+#So lots of duplicates where multiple programs went out on a single day, but doesn't seem like any other. 
 
-#Filtering out any duplicated
-# chl_bulk <- chl_bulk %>% 
-#   filter(filt_num == 1)
-
-#The bulk data looks good.
 ```
 
 ```{r}
@@ -249,7 +243,7 @@ chl_bulk %>%
   filter(line_out_depth < 50 & is.na(chla_flag) & date > "2019-01-01") %>% 
   ggplot(aes(x = date)) +
   geom_point(aes(y = chla), pch = 21, size = 3.0) +
-  geom_line(aes(y =chla), size = 1) +
+  geom_line(aes(y = chla), size = 1) +
   geom_point(aes(y = all_chl_a), pch = 22, fill = "green",
              alpha = 0.4, size = 3) +
   facet_grid(line_out_depth ~ .) +
@@ -263,6 +257,8 @@ chl_bulk %>%
 ggsave(here("figures_qc", "timeseries_qu39_bulk_no-flag.png"),
         width = 16, height = 12, dpi = 300)
 ```
+
+
 ```{r}
 #Plotting hplc against bulk chl
 
@@ -278,7 +274,7 @@ chl_bulk %>%
   theme_bw() +
   theme()
 
-#Very odd trend as it would be expected that samples that weren't diluted would saturate the fluorometer and result in lower chla per HPLC TChla. Here the values are higher, although the trend line is <1, so higher values would go below 1:1 line and underpredict.
+#Very odd trend as it would be expected that samples that weren't diluted would saturate the fluorometer and result in lower chla per HPLC TChla. Here the values are higher, although the trend line is <1, so higher values would go below 1:1 line and under-predict.
 
 #The new HPLC to chla with the diluted samples has 1:1 slope. Never had this before.
 ```
@@ -298,6 +294,7 @@ chl_bulk %>%
 #Definitely some outlier samples here that could have issues
 ```
 ```{r}
+#Plotting regression of only data without a QC flag
 chl_bulk %>% 
   filter(is.na(chla_flag)) %>% 
   ggplot(aes(x = all_chl_a, y = chla)) +
@@ -315,7 +312,7 @@ chl_bulk %>%
 
 ```{r}
 
-#Plotting only un-QC'd data and coloring by whether the acid ratio is <1.2 - log10 scale
+#Same plot as above but in log10 scale
 chl_bulk %>% 
   filter(is.na(chla_flag)) %>% 
   ggplot(aes(x = log10(all_chl_a), y = log10(chla))) +
@@ -325,6 +322,8 @@ chl_bulk %>%
   ylim(-2, 2) +
   theme_bw() +
   theme()
+
+#Some low concentration samples that have low acid ratios and much lower chla when compared to TChla.
 ```
 ```{r}
 #I want to isolate these two samples with low ARs
@@ -336,16 +335,16 @@ check_bulk_ar_2 <- chl_bulk %>%
 ```
 
 
-
-
-
-
 ```{r}
+#Setting up sheet so I can plot relationships by analysis day
 chl_bulk <- chl_bulk %>% 
   mutate(analyzed_date = lubridate::date(analyzed)) %>% 
   relocate(analyzed_date, .after = analyzed)
+```
 
 
+```{r}
+#Plotting bulk chlorophyll versus HPLC TChla by analysis day - only works for 2021 data 
 chl_bulk %>% 
   filter(is.na(chla_flag)) %>% 
   ggplot(aes(x = all_chl_a, y = chla)) +
@@ -353,22 +352,39 @@ chl_bulk %>%
   geom_smooth(method = 'lm', color = "red", fill = "red") +
   geom_abline(intercept = 0, slope = 1) +
   facet_wrap(~ as.factor(analyzed_date), scales = "free" ) +
-  xlim(0,25) +
-  ylim(0,25) +
+  # xlim(0,25) +
+  # ylim(0,25) +
   theme_bw() +
   theme()
 
-ggsave(here("figures_qc", "test.png"),
+ggsave(here("figures_qc", "analysis_day_chl_hplc_comparison.png"),
         width = 16, height = 12, dpi = 300)
 
+#This is somewhat enlightening as it makes it easier to pinpoint samples that don't match well. For instance, 2021-05-15.
 ```
 
-
 ```{r}
-#Looking at samples that were collected in the surface waters and have low acid ratios.
+#Looking at samples that were collected in the surface waters and have low acid ratios. Not dependent on having an HPLc match as was above.
 check_bulk_ar <- chl_bulk %>% 
   filter(is.na(chla_flag) & acid_ratio < 1.2 & line_out_depth < 50)
 ```
+
+```{r}
+chl_bulk %>%
+  mutate(year = lubridate::year(date)) %>% 
+  filter(line_out_depth == 5) %>% 
+  ggplot(aes(x = as.factor(month), y = log10(chla))) +
+  geom_boxplot() +
+  geom_jitter(aes(shape = chla_flag, color = as.factor(year))) +
+  theme_bw()
+```
+
+
+
+Does this give me enough to fully QC the Bulk data?
+
+
+
 
 ```{r}
 #Investigating size-fractionated data for errors.
