@@ -326,12 +326,11 @@ chl_bulk %>%
 #Some low concentration samples that have low acid ratios and much lower chla when compared to TChla.
 ```
 ```{r}
-#I want to isolate these two samples with low ARs
+#I want to isolate these two samples with low ARs -  these are only samples that have corresponding HPLC
 check_bulk_ar_2 <- chl_bulk %>% 
   filter(is.na(chla_flag) & !is.na(all_chl_a) & acid_ratio < 1.2 &
            line_out_depth < 50)
 
-#These are the two points showing up in the above plot.
 ```
 
 
@@ -373,18 +372,16 @@ check_bulk_ar <- chl_bulk %>%
 chl_bulk %>%
   mutate(year = lubridate::year(date)) %>% 
   filter(line_out_depth == 5) %>% 
-  ggplot(aes(x = as.factor(month), y = log10(chla))) +
+  ggplot(aes(x = as.factor(month), y = log10(chla + 1))) +
   geom_boxplot() +
-  geom_jitter(aes(shape = chla_flag, color = as.factor(year))) +
-  theme_bw()
+  geom_jitter(aes(shape = chla_flag, fill = as.factor(year)), size = 2) +
+  scale_shape_manual(values = c(21, 22, 23)) + 
+  scale_fill_brewer(palette = "RdYlBu") +
+  theme_bw() +
+  labs(fill = "Year", shape = "Station") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
 ```
-
-
-
 Does this give me enough to fully QC the Bulk data?
-
-
-
 
 ```{r}
 #Investigating size-fractionated data for errors.
