@@ -715,22 +715,67 @@ chl_sf2 <- chl_sf2 %>%
 ```{r}
 chl_sf2 <- arrange(mutate(chl_sf2, filter_type = factor(filter_type,
                                               levels = order_sf)))
-
-
-chl_sf2 %>%
-  filter(line_out_depth == 0 & !survey == "ZOOPSPRINT") %>% 
-  ggplot(aes(x = date, y = chla, fill = filter_type)) + 
-  geom_area(color = "black") +
-  scale_fill_brewer(palette = "Set1", labels = c(expression(Pico[CHL]),
-                                                   expression(Nano[CHL]),
-                                                   expression(Micro[CHL]))) +
-  facet_grid(line_out_depth ~ ., scales = "free_y") +
-  theme_bw()
-
-ggsave(here("figures_qc", "SF_test2.png"),
-        width = 16, height = 6, dpi = 300)
 ```
 
+
+```{r}
+chl_sf2 %>%
+  filter(line_out_depth < 50 & !survey == "ZOOPSPRINT") %>% 
+  group_by(date, line_out_depth, filter_type) %>% 
+  summarise(chla_avg = mean(chla)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = date, y = chla_avg, fill = filter_type)) + 
+  geom_area(color = "black") +
+  scale_fill_brewer(palette = "Set1",
+                    labels = c(expression(Pico[CHL]),
+                               expression(Nano[CHL]),
+                               expression(Micro[CHL])),
+                    name = "") +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  labs(y = "Chla (ug/L)") +
+  theme_bw()+
+  theme(text = element_text(size = 25),
+        axis.title.x = element_blank(),
+        # axis.text.x = element_blank(),
+        axis.text = element_text(colour = "black"),
+        legend.position = "top",
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        strip.background = element_blank()) 
+
+ggsave(here("figures_qc", "SF_timeseries-depth.png"),
+        width = 16, height = 10, dpi = 300)
+```
+```{r}
+chl_sf2 %>%
+  filter(line_out_depth == 5 & !survey == "ZOOPSPRINT") %>% 
+  group_by(date, line_out_depth, filter_type) %>% 
+  summarise(chla_avg = mean(chla)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = date, y = chla_avg, fill = filter_type)) + 
+  geom_area(color = "black") +
+  scale_fill_brewer(palette = "Set1",
+                    labels = c(expression(Pico[CHL]),
+                               expression(Nano[CHL]),
+                               expression(Micro[CHL])),
+                    name = "") +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  labs(y = "Chla (ug/L)") +
+  theme_bw()+
+  theme(text = element_text(size = 25),
+        axis.title.x = element_blank(),
+        # axis.text.x = element_blank(),
+        axis.text = element_text(colour = "black"),
+        legend.position = "top",
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        strip.background = element_blank()) 
+
+ggsave(here("figures_qc", "SF_timeseries-depth-5.png"),
+        width = 16, height = 5, dpi = 300)
+
+
+```
 
 
 
