@@ -1,0 +1,633 @@
+---
+title: "Chlorophyll QC"
+output: html_notebook
+---
+
+This notebook is being made to start a chlorophyll QC process for new incoming samples. 
+
+This is currently configured to only QC new data, but it would be good to have all the data from the time-series to compare new data with long term trends. Just tricky because there are a lot of errors to sift through in the old data (i.e. lots of duplicates, missing records etc. that complicate the checks.)
+
+```{r}
+#Upload packages
+library(tidyverse)
+library(here)
+library(patchwork)
+library(readxl)
+```
+
+```{r}
+#Upload chl dataset - entire QU39 dataset downloaded from the portal on 2022-10-12
+chl <- read_csv(here("files", "rocky_2021_2022.csv"))
+```
+
+
+```{r}
+#Filtering out the Rocky Intertidal samples
+chl <- chl %>% 
+  filter(project == "MARINEGEO")
+```
+
+```{r}
+#Selecting relevant columns
+chl <- chl %>% 
+  select(date, site_id, survey, rn, sampling_bout, line_out_depth, collected, 
+         analyzed, hakai_id, calibration:calibration_slope, filter_type,
+         before_acid, after_acid, acid_flag, dilution_factor, chla, chla_flag,
+         phaeo, phaeo_flag) 
+
+#Adding month column
+chl <- chl %>% 
+  mutate(month = lubridate::month(date)) %>% 
+  relocate(month, .after = date)
+
+#Creating duplicate and acid ratio columns
+chl <- chl %>% 
+  group_by(collected, site_id, line_out_depth, filter_type) %>% 
+  mutate(rep = n()) %>%
+  ungroup() %>% 
+  group_by(hakai_id) %>% 
+  mutate(rep_id = n()) %>% 
+  ungroup() %>% 
+  mutate(acid_ratio = before_acid/after_acid)
+
+#Pulling out duplicates - 33 records. Samples collected on 2022-04-12 were replicate samples with some being sent to DFO (19 records)
+check_dup <- chl %>% 
+  filter(rep > 1)
+
+#No samples anymore with duplicate Hakai ID.
+check_dup_id <- chl %>% 
+  filter(rep_id > 1)
+
+```
+
+```{r}
+#Diagnostic checks
+
+#Depth check - where were samples collected - only bulk collected at 100 and 115m.
+check_depth <- chl %>% 
+  distinct(line_out_depth, filter_type)
+
+#Looking at calibrations applied to data - there are some records with NA calibrations
+check_cali <- chl %>% 
+  distinct(calibration, acid_ratio_correction_factor, acid_coefficient,
+           calibration_slope)
+
+#Looking at calibrations that have NA calibration - 308 samples. Many historical and were never analyzed
+check_cali_na <- chl %>% 
+  filter(is.na(calibration))
+
+#Looking for negative values - lots (105 records), including unflagged data.
+check_neg <- chl %>% 
+  filter(chla < 0 | phaeo < 0)
+
+#There are lots and I need to investigate this - same output as samples that weren't 
+check_na <- chl %>% 
+  filter(is.na(chla) | is.na(phaeo))
+
+#Checking if there are any pre-existing flags - huge amount of samples flagged. I went through these pretty carefully and they should be pretty good. 4 samples with NA Chl flags and SVD phaeo flags.
+check_flag <- chl %>% 
+  filter(!is.na(chla_flag) | !is.na(phaeo_flag))
+
+#Checking acid flag 
+check_acid_flag <- chl %>% 
+  filter(!is.na(acid_flag))
+
+#Looking for filters with low acid ratios -  quite a few for data that hasn't been flagged yet.
+check_ar <- chl %>% 
+  filter(acid_ratio < 1.2)
+```
+
+
+```{r}
+#Plotting acid ratio value numbers by depth and filter size for all data I have flagged as Accepted Value
+check_ar %>% 
+  # filter(is.na(chla_flag)) %>% 
+  # filter(chla_flag == "AV") %>% 
+  ggplot(aes(x = site_id, fill = filter_type)) +
+  geom_bar(stat = "count", position = "stack", color = "Black") +
+  labs(x = "Site",
+       y = "count") +
+  theme_bw()
+```
+```{r}
+#Plotting acid ratio value numbers by month and filter size for all data I have flagged as Accepted Value - Not super informative
+check_ar %>% 
+  # filter(is.na(chla_flag)) %>% 
+  # filter(chla_flag == "AV" & line_out_depth < 50) %>% 
+  ggplot(aes(x = as.factor(month), fill = filter_type)) +
+  geom_bar(stat = "count", position = "stack", color = "Black") +
+  labs(x = "depth",
+       y = "count") +
+  theme_bw() + 
+  facet_grid(site_id ~ .)
+```
+
+
+```{r}
+#checking samples that were diluted. Need to determine when we started doing this.
+check_dilution <- chl %>% 
+  filter(dilution_factor > 1)
+
+#Looking at samples that haven't been qc'd that have raw values above instrument threshold - good sign, only 1 and not above threshold.
+check_adl <- chl %>% 
+  filter(!is.na(analyzed) & is.na(chla_flag) & before_acid > 600000)
+```
+
+
+```{r}
+#Pulling out all samples that haven't been QC'd on the new module. 
+chl_qc <- chl %>% 
+  filter(!is.na(analyzed) &
+           (is.na(chla_flag) | chla_flag == "AV" | chla_flag == "ADL"))
+
+#Pulling out all QC'd data
+chl_av <- chl %>% 
+  filter(chla_flag == "AV")
+
+```
+
+Does this give me enough to fully QC the Bulk data?
+
+```{r}
+#Investigating size-fractionated data for errors.
+
+#Calculating the number of filters for each size-fraction set
+chl_sf <- chl %>% 
+  filter(!is.na(chla)) %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(filt_num = n()) %>% 
+  ungroup()
+
+#Looking for size fraction sets that have less than 3 filters - 119 observations - I'd imagine a lot of SVC and SVD flags for single filter.
+check_sf_low <- chl_sf %>% 
+  filter(filt_num < 3)
+
+check_sf_low2 <- chl_sf %>% 
+  filter(filt_num < 6)
+
+#Looking at size fraction sets that have more than 3 filters. Some are just replicated hakai IDS, but quite a few from zoopsprint - I wonder if one of the GF/Fs is meant to be bulk.
+check_sf_high <- chl_sf %>% 
+  filter(filt_num > 3)
+
+#Subsetting where there are 3 size-fractionated filters. 
+chl_sf <- chl_sf %>% 
+  filter(filt_num == 3)
+
+#Querying replicated filter types within a set - two examples where there are two duplicated filters within a 3 filter set. Only one is not QC'd - check metadata note.
+check_sf_dup <- chl_sf %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique > 1)  
+ 
+
+chl_sf <- chl_sf %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique == 1)
+  
+```
+
+```{r}
+gff <- chl %>% 
+  filter(filter_type == "GF/F" & !is.na(chla)) %>% 
+  select(date, site_id, sampling_bout, acid_ratio, chla) 
+
+gff_wide <- gff %>% 
+  pivot_wider(names_from = sampling_bout, values_from = c(chla, acid_ratio))
+```
+
+```{r}
+gff_wide %>% 
+  ggplot(aes(x = chla_1, y = chla_2)) + 
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0, 1.25) +
+  ylim(0, 1.25)
+```
+```{r}
+um3 <- chl %>% 
+  filter(filter_type == "3um" & !is.na(chla)) %>% 
+  select(date, site_id, filter_type, sampling_bout, acid_ratio, chla) 
+
+um3_wide <- um3 %>% 
+  filter(!date == "2021-06-25") %>% 
+  pivot_wider(names_from = sampling_bout, values_from = c(chla, acid_ratio))
+```
+
+```{r}
+um3_wide %>% 
+  ggplot(aes(x = chla_1, y = chla_2)) + 
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0, 1) +
+  ylim(0, 1.5)
+```
+```{r}
+um20 <- chl %>% 
+  filter(filter_type == "20um" & !is.na(chla)) %>% 
+  select(date, site_id, sampling_bout, filter_type, acid_ratio, chla) 
+
+um20_wide <- um20 %>% 
+  pivot_wider(names_from = sampling_bout, values_from = c(chla, acid_ratio))
+```
+
+```{r}
+um20_wide %>% 
+  ggplot(aes(x = chla_1, y = chla_2)) + 
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0, 3.25) +
+  ylim(0, 3.25)
+```
+
+```{r}
+chl_2 <- chl %>% 
+  filter(!is.na(chla)) %>% 
+  group_by(date, sampling_bout, filter_type) %>% 
+  mutate(rep_filt = n()) %>% 
+  ungroup()
+
+chl_2 <- chl %>% 
+  filter(!is.na(chla)) %>% 
+  group_by(date, sampling_bout) %>% 
+  mutate(rep_filt_grp = n()) %>% 
+  ungroup()
+
+chl_sf <- chl_2 %>% 
+  filter(rep_filt == 1 & rep_filt_grp == 3) %>% 
+  group_by(date, sampling_bout) %>% 
+  summarise(chla_sum = sum(chla)) %>% 
+  ungroup()
+  
+sum <- chl_sf %>% 
+  select(date, sampling_bout, chla_sum) 
+
+sum_wide <- sum %>% 
+  pivot_wider(names_from = sampling_bout, values_from = chla_sum) %>% 
+  rename(sum_1 = `1`, sum_2 = `2`)
+```
+
+```{r}
+sum_wide %>% 
+  ggplot(aes(x = sum_1, y = sum_2)) + 
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0, 6) +
+  ylim(0, 6)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#Calculating the size-fractionated sum for comparison with the bulk
+chl_sf_sum <- chl_sf %>% 
+  filter(chla_flag == "AV" | chla_flag == "ADL" | is.na(chla_flag)) %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(sf_sum = sum(chla)) %>% 
+  ungroup() %>% 
+  distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
+  select(collected, line_out_depth, sf_sum)
+
+#Merging with the size-fractionated data for comparison.
+chl_comp <- chl_bulk %>%
+  select(date, collected, analyzed_date, line_out_depth, bulk_chla = chla,
+         bulk_flag = chla_flag, all_chl_a) %>% 
+  filter(line_out_depth < 99) %>% 
+  left_join(chl_sf_sum)
+
+#Looking why there are NAs in join. All from where SF did not have 3 filters in set.
+check_comp_na <- chl_comp %>% 
+  filter(is.na(bulk_chla) | is.na(sf_sum))
+
+```
+
+```{r}
+#Plotting sf_sum against bulk chl - Something is up with my join.
+chl_comp %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum, fill = bulk_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = bulk_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0, 30) +
+  ylim(0, 30) +
+  theme_bw() +
+  theme()
+
+#To me this looks pretty darn good - the samples with ADL may have a trend to higher size fractionated sum at higher concentrations.
+
+#Now looks like there a couple of samples with low SF-Sum
+
+```
+
+```{r}
+chl_comp %>% 
+  ggplot(aes(x = log10(bulk_chla), y = log10(sf_sum), fill = bulk_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = bulk_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0, 30) +
+  # ylim(0, 30) +
+  theme_bw() +
+  theme()
+```
+
+```{r}
+chl_comp %>% 
+  ggplot(aes(x = all_chl_a, y = sf_sum, fill = bulk_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0,30) +
+  ylim(0,30) +
+  theme_bw() +
+  theme()
+```
+
+
+```{r}
+#Looking at SF-Sum versus other metrics
+chl_comp %>%
+  filter(line_out_depth < 50 & is.na(bulk_flag) & date > "2019-01-01") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = bulk_chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = bulk_chla), size = 1) +
+  geom_point(aes(y = sf_sum), pch = 21, size = 3.0, color = "red") +
+  geom_line(aes(y = sf_sum), size = 1, color = "red") +
+  geom_point(aes(y = all_chl_a), pch = 22, fill = "green",
+             alpha = 0.4, size = 3) +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  theme_bw() +
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+  
+ggsave(here("figures_qc", "timeseries_qu39_bulk-SF_no-flag.png"),
+        width = 16, height = 12, dpi = 300)
+
+#Some clear discrepencies here.
+
+#0m
+#one point where much lower mid 2021
+#One point where much lower second bloom 2022
+
+#5m
+#One point much lower SB 2022
+
+#10m
+#One point much lower second bloom 2022
+
+```
+
+```{r}
+
+chl_comp %>% 
+  filter(is.na(bulk_flag)) %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~ (as.factor(analyzed_date)), scales = "free" ) +
+  theme_bw() +
+  theme()
+
+ggsave(here("figures_qc", "test2.png"),
+        width = 16, height = 12, dpi = 300)
+
+
+
+sf_check <- chl_comp %>% 
+  filter(analyzed_date == "2022-09-04")
+
+#QCHL14258 - 2022-04-21, 0m. Nothing noticeably wrong with sample and no metadata notes. Just quite a bit lower than bulk. What is correct?
+
+#QCHL14266 - 2022-04-01, 10m. Nothing noticeably wrong with the sample and no metadata notes. Just quite a bit lower than Bulk. Which measure is correct? No HPLC yet. Check CTD about 7ug/L, which is closer to the SF-Sum.
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#Looking at specific samples that were left in TULA freezer for extended period
+chl_bulk %>% 
+  filter(date == "2021-05-18") %>% 
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0, 1) +
+  # ylim(0, 1) +
+  theme_bw() +
+  theme()
+
+test <- chl_bulk %>% 
+  filter(date == "2021-05-18") 
+
+
+#Looking at specific samples that were left in TULA freezer for extended period
+chl_comp %>% 
+  filter(date == "2020-08-04") %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0, 5) +
+  # ylim(0, 5) +
+  theme_bw() +
+  theme()
+```
+
+```{r}
+#Let's plot the entire SF timeseries
+#Order phytoplankton groups roughly from smallest to largest - create order list
+
+order_sf <- c("GF/F", "3um", "20um")
+
+#Chemtax - Specify order of phyto groups for figures
+chl_sf <- arrange(mutate(chl_sf, filter_type = factor(filter_type,
+                                              levels = order_sf)))
+
+
+chl_sf %>%
+  filter(line_out_depth == 0) %>% 
+  ggplot(aes(x = date, y = chla, fill = filter_type)) + 
+  geom_area(color = "black") +
+  scale_fill_brewer(palette = "Set1", labels = c(expression(Pico[CHL]),
+                                                   expression(Nano[CHL]),
+                                                   expression(Micro[CHL]))) +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  theme_bw()
+
+ggsave(here("figures_qc", "SF_test.png"),
+        width = 16, height = 6, dpi = 300)
+
+
+#Some issues with plotting need to be investigated.
+```
+
+```{r}
+#Pulling out all samples that haven't been QC'd on the new module. 
+chl_qc2 <- chl %>% 
+  filter(!is.na(analyzed) &
+           (is.na(chla_flag) | chla_flag == "AV" | chla_flag == "ADL"))
+
+#Pulling out all QC'd data
+chl_av <- chl %>% 
+  filter(chla_flag == "AV")
+
+```
+
+
+```{r}
+#Investigating size-fractionated data for errors.
+
+#Calculating the number of filters for each size-fraction set
+chl_sf2 <- chl %>% 
+  filter(!is.na(analyzed) &
+           (is.na(chla_flag) | chla_flag == "AV" | chla_flag == "ADL" |
+              chla_flag == "SVC")) %>% 
+  filter(!filter_type == "Bulk GF/F") %>%
+  filter(!is.na(chla)) %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(filt_num = n()) %>% 
+  ungroup()
+
+
+#Subsetting where there are 3 size-fractionated filters. 
+chl_sf2 <- chl_sf2 %>% 
+  filter(filt_num == 3)
+ 
+
+chl_sf2 <- chl_sf2 %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique == 1)
+  
+```
+
+```{r}
+chl_sf2 <- arrange(mutate(chl_sf2, filter_type = factor(filter_type,
+                                              levels = order_sf)))
+```
+
+
+```{r}
+chl_sf2 %>%
+  filter(line_out_depth < 50 & !survey == "ZOOPSPRINT") %>% 
+  group_by(date, line_out_depth, filter_type) %>% 
+  summarise(chla_avg = mean(chla)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = date, y = chla_avg, fill = filter_type)) + 
+  geom_area(color = "black") +
+  scale_fill_brewer(palette = "Set1",
+                    labels = c(expression(Pico[CHL]),
+                               expression(Nano[CHL]),
+                               expression(Micro[CHL])),
+                    name = "") +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  labs(y = "Chla (ug/L)") +
+  theme_bw()+
+  theme(text = element_text(size = 25),
+        axis.title.x = element_blank(),
+        # axis.text.x = element_blank(),
+        axis.text = element_text(colour = "black"),
+        legend.position = "top",
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        strip.background = element_blank()) 
+
+ggsave(here("figures_qc", "SF_timeseries-depth.png"),
+        width = 16, height = 10, dpi = 300)
+```
+```{r}
+chl_sf2 %>%
+  filter(line_out_depth == 5 & !survey == "ZOOPSPRINT") %>% 
+  group_by(date, line_out_depth, filter_type) %>% 
+  summarise(chla_avg = mean(chla)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = date, y = chla_avg, fill = filter_type)) + 
+  geom_area(color = "black") +
+  scale_fill_brewer(palette = "Set1",
+                    labels = c(expression(Pico[CHL]),
+                               expression(Nano[CHL]),
+                               expression(Micro[CHL])),
+                    name = "") +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  labs(y = "Chla (ug/L)") +
+  theme_bw()+
+  theme(text = element_text(size = 25),
+        axis.title.x = element_blank(),
+        # axis.text.x = element_blank(),
+        axis.text = element_text(colour = "black"),
+        legend.position = "top",
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        strip.background = element_blank()) 
+
+ggsave(here("figures_qc", "SF_timeseries-depth-5.png"),
+        width = 16, height = 5, dpi = 300)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
