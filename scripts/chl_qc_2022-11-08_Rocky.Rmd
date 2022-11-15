@@ -18,6 +18,8 @@ library(readxl)
 ```{r}
 #Upload chl dataset - entire QU39 dataset downloaded from the portal on 2022-10-12
 chl <- read_csv(here("files", "rocky_2021_2022.csv"))
+
+chl_kc10 <- read_csv(here("files", "kc10_2021_2022.csv"))
 ```
 
 
@@ -25,6 +27,13 @@ chl <- read_csv(here("files", "rocky_2021_2022.csv"))
 #Filtering out the Rocky Intertidal samples
 chl <- chl %>% 
   filter(project == "MARINEGEO")
+
+chl_kc10 <- chl_kc10 %>% 
+  filter(chla_flag == "AV" | is.na(chla_flag)) %>% 
+  filter(line_out_depth == 0 & !filter_type == "Bulk GF/F")
+
+chl_kc10 <- chl_kc10 %>% 
+  mutate(ar = before_acid/after_acid)
 ```
 
 ```{r}
@@ -199,14 +208,26 @@ gff_wide <- gff %>%
 ```
 
 ```{r}
-gff_wide %>% 
+f_gff <- gff_wide %>% 
   ggplot(aes(x = chla_1, y = chla_2)) + 
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm') +
-  geom_abline(intercept = 0, slope = 1) +
+  geom_point(pch = 21, size = 3.5, fill = "black") +
+  geom_smooth(method = 'lm', color = "red") +
+  geom_abline(intercept = 0, slope = 1, size = 1) +
+  ggpubr::stat_cor(p.accuracy = 0.001, r.accuracy = 0.01, size = 10) +
   xlim(0, 1.25) +
-  ylim(0, 1.25)
+  ylim(0, 1.25) +
+  xlab(bquote("Chla"[GFF]~"-1" ~ "(ug/L)")) +
+  ylab(bquote("Chla"[GFF]~"-2" ~ "(ug/L)")) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.text = element_text(colour = "black"),
+        # axis.text.y = element_blank(),
+        # axis.title.y = element_blank(),
+        legend.position = "none") +
+  labs(fill = "Date", shape = "Station") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
 ```
+
 ```{r}
 um3 <- chl %>% 
   filter(filter_type == "3um" & !is.na(chla)) %>% 
@@ -218,14 +239,34 @@ um3_wide <- um3 %>%
 ```
 
 ```{r}
-um3_wide %>% 
+f_3um <- um3_wide %>% 
   ggplot(aes(x = chla_1, y = chla_2)) + 
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm') +
-  geom_abline(intercept = 0, slope = 1) +
-  xlim(0, 1) +
-  ylim(0, 1.5)
+  geom_point(pch = 21, size = 3.5, fill = "black") +
+  geom_smooth(method = 'lm', color = "red") +
+  geom_abline(intercept = 0, slope = 1, size = 1) +
+  ggpubr::stat_cor(p.accuracy = 0.001, r.accuracy = 0.01, size = 10) +
+  xlim(0, 1.5) +
+  ylim(0, 1.5) +
+  xlab(bquote("Chla"["3um"]~"-1" ~ "(ug/L)")) +
+  ylab(bquote("Chla"["3um"]~"-2" ~ "(ug/L)")) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.text = element_text(colour = "black"),
+        # axis.text.y = element_blank(),
+        # axis.title.y = element_blank(),
+        legend.position = "none") +
+  labs(fill = "Date", shape = "Station") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
 ```
+
+```{r}
+um3 %>% 
+  ggplot(aes(x = acid_ratio)) +
+  geom_histogram(binwidth = 0.05, alpha = 0.5, color = "black") +
+  ylim(0, 15)
+```
+
+
 ```{r}
 um20 <- chl %>% 
   filter(filter_type == "20um" & !is.na(chla)) %>% 
@@ -236,13 +277,24 @@ um20_wide <- um20 %>%
 ```
 
 ```{r}
-um20_wide %>% 
+f_20um <- um20_wide %>% 
   ggplot(aes(x = chla_1, y = chla_2)) + 
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm') +
-  geom_abline(intercept = 0, slope = 1) +
+  geom_point(pch = 21, size = 3.5, fill = "black") +
+  geom_smooth(method = 'lm', color = "red") +
+  geom_abline(intercept = 0, slope = 1, size = 1) +
+  ggpubr::stat_cor(p.accuracy = 0.001, r.accuracy = 0.01, size = 10) +
   xlim(0, 3.25) +
-  ylim(0, 3.25)
+  ylim(0, 3.25) +
+  xlab(bquote("Chla"["20um"]~"-1" ~ "(ug/L)")) +
+  ylab(bquote("Chla"["20um"]~"-2" ~ "(ug/L)")) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.text = element_text(colour = "black"),
+        # axis.text.y = element_blank(),
+        # axis.title.y = element_blank(),
+        legend.position = "none") +
+  labs(fill = "Date", shape = "Station") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
 ```
 
 ```{r}
@@ -252,7 +304,7 @@ chl_2 <- chl %>%
   mutate(rep_filt = n()) %>% 
   ungroup()
 
-chl_2 <- chl %>% 
+chl_2 <- chl_2 %>% 
   filter(!is.na(chla)) %>% 
   group_by(date, sampling_bout) %>% 
   mutate(rep_filt_grp = n()) %>% 
@@ -273,331 +325,158 @@ sum_wide <- sum %>%
 ```
 
 ```{r}
-sum_wide %>% 
+f_sf_sum <- sum_wide %>% 
   ggplot(aes(x = sum_1, y = sum_2)) + 
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm') +
-  geom_abline(intercept = 0, slope = 1) +
+  geom_point(pch = 21, size = 3.5, fill = "black") +
+  geom_smooth(method = 'lm', color = "red") +
+  geom_abline(intercept = 0, slope = 1, size = 1) +
+  ggpubr::stat_cor(p.accuracy = 0.001, r.accuracy = 0.01, size = 10) +
   xlim(0, 6) +
-  ylim(0, 6)
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-#Calculating the size-fractionated sum for comparison with the bulk
-chl_sf_sum <- chl_sf %>% 
-  filter(chla_flag == "AV" | chla_flag == "ADL" | is.na(chla_flag)) %>% 
-  group_by(collected, line_out_depth) %>% 
-  mutate(sf_sum = sum(chla)) %>% 
-  ungroup() %>% 
-  distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
-  select(collected, line_out_depth, sf_sum)
-
-#Merging with the size-fractionated data for comparison.
-chl_comp <- chl_bulk %>%
-  select(date, collected, analyzed_date, line_out_depth, bulk_chla = chla,
-         bulk_flag = chla_flag, all_chl_a) %>% 
-  filter(line_out_depth < 99) %>% 
-  left_join(chl_sf_sum)
-
-#Looking why there are NAs in join. All from where SF did not have 3 filters in set.
-check_comp_na <- chl_comp %>% 
-  filter(is.na(bulk_chla) | is.na(sf_sum))
-
-```
-
-```{r}
-#Plotting sf_sum against bulk chl - Something is up with my join.
-chl_comp %>% 
-  ggplot(aes(x = bulk_chla, y = sf_sum, fill = bulk_flag)) +
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(aes(color = bulk_flag), method = 'lm') +
-  geom_abline(intercept = 0, slope = 1) +
-  xlim(0, 30) +
-  ylim(0, 30) +
+  ylim(0, 6) +
+  xlab(bquote("Chla"["SF-Sum"]~"-1" ~ "(ug/L)")) +
+  ylab(bquote("Chla"["SF-Sum"]~"-2" ~ "(ug/L)")) +
   theme_bw() +
-  theme()
-
-#To me this looks pretty darn good - the samples with ADL may have a trend to higher size fractionated sum at higher concentrations.
-
-#Now looks like there a couple of samples with low SF-Sum
-
-```
-
-```{r}
-chl_comp %>% 
-  ggplot(aes(x = log10(bulk_chla), y = log10(sf_sum), fill = bulk_flag)) +
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(aes(color = bulk_flag), method = 'lm') +
-  geom_abline(intercept = 0, slope = 1) +
-  # xlim(0, 30) +
-  # ylim(0, 30) +
-  theme_bw() +
-  theme()
-```
-
-```{r}
-chl_comp %>% 
-  ggplot(aes(x = all_chl_a, y = sf_sum, fill = bulk_flag)) +
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm') +
-  geom_abline(intercept = 0, slope = 1) +
-  xlim(0,30) +
-  ylim(0,30) +
-  theme_bw() +
-  theme()
-```
-
-
-```{r}
-#Looking at SF-Sum versus other metrics
-chl_comp %>%
-  filter(line_out_depth < 50 & is.na(bulk_flag) & date > "2019-01-01") %>% 
-  ggplot(aes(x = date)) +
-  geom_point(aes(y = bulk_chla), pch = 21, size = 3.0) +
-  geom_line(aes(y = bulk_chla), size = 1) +
-  geom_point(aes(y = sf_sum), pch = 21, size = 3.0, color = "red") +
-  geom_line(aes(y = sf_sum), size = 1, color = "red") +
-  geom_point(aes(y = all_chl_a), pch = 22, fill = "green",
-             alpha = 0.4, size = 3) +
-  facet_grid(line_out_depth ~ ., scales = "free_y") +
-  theme_bw() +
-  labs(fill = "Flag") +
   theme(text = element_text(size = 32),
-        axis.title.x = element_blank())
-  
-ggsave(here("figures_qc", "timeseries_qu39_bulk-SF_no-flag.png"),
-        width = 16, height = 12, dpi = 300)
-
-#Some clear discrepencies here.
-
-#0m
-#one point where much lower mid 2021
-#One point where much lower second bloom 2022
-
-#5m
-#One point much lower SB 2022
-
-#10m
-#One point much lower second bloom 2022
-
-```
-
-```{r}
-
-chl_comp %>% 
-  filter(is.na(bulk_flag)) %>% 
-  ggplot(aes(x = bulk_chla, y = sf_sum)) +
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm', color = "red", fill = "red") +
-  geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~ (as.factor(analyzed_date)), scales = "free" ) +
-  theme_bw() +
-  theme()
-
-ggsave(here("figures_qc", "test2.png"),
-        width = 16, height = 12, dpi = 300)
-
-
-
-sf_check <- chl_comp %>% 
-  filter(analyzed_date == "2022-09-04")
-
-#QCHL14258 - 2022-04-21, 0m. Nothing noticeably wrong with sample and no metadata notes. Just quite a bit lower than bulk. What is correct?
-
-#QCHL14266 - 2022-04-01, 10m. Nothing noticeably wrong with the sample and no metadata notes. Just quite a bit lower than Bulk. Which measure is correct? No HPLC yet. Check CTD about 7ug/L, which is closer to the SF-Sum.
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-#Looking at specific samples that were left in TULA freezer for extended period
-chl_bulk %>% 
-  filter(date == "2021-05-18") %>% 
-  ggplot(aes(x = all_chl_a, y = chla)) +
-  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm', color = "red", fill = "red") +
-  geom_abline(intercept = 0, slope = 1) +
-  # xlim(0, 1) +
-  # ylim(0, 1) +
-  theme_bw() +
-  theme()
-
-test <- chl_bulk %>% 
-  filter(date == "2021-05-18") 
-
-
-#Looking at specific samples that were left in TULA freezer for extended period
-chl_comp %>% 
-  filter(date == "2020-08-04") %>% 
-  ggplot(aes(x = bulk_chla, y = sf_sum)) +
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm', color = "red", fill = "red") +
-  geom_abline(intercept = 0, slope = 1) +
-  # xlim(0, 5) +
-  # ylim(0, 5) +
-  theme_bw() +
-  theme()
-```
-
-```{r}
-#Let's plot the entire SF timeseries
-#Order phytoplankton groups roughly from smallest to largest - create order list
-
-order_sf <- c("GF/F", "3um", "20um")
-
-#Chemtax - Specify order of phyto groups for figures
-chl_sf <- arrange(mutate(chl_sf, filter_type = factor(filter_type,
-                                              levels = order_sf)))
-
-
-chl_sf %>%
-  filter(line_out_depth == 0) %>% 
-  ggplot(aes(x = date, y = chla, fill = filter_type)) + 
-  geom_area(color = "black") +
-  scale_fill_brewer(palette = "Set1", labels = c(expression(Pico[CHL]),
-                                                   expression(Nano[CHL]),
-                                                   expression(Micro[CHL]))) +
-  facet_grid(line_out_depth ~ ., scales = "free_y") +
-  theme_bw()
-
-ggsave(here("figures_qc", "SF_test.png"),
-        width = 16, height = 6, dpi = 300)
-
-
-#Some issues with plotting need to be investigated.
-```
-
-```{r}
-#Pulling out all samples that haven't been QC'd on the new module. 
-chl_qc2 <- chl %>% 
-  filter(!is.na(analyzed) &
-           (is.na(chla_flag) | chla_flag == "AV" | chla_flag == "ADL"))
-
-#Pulling out all QC'd data
-chl_av <- chl %>% 
-  filter(chla_flag == "AV")
-
-```
-
-
-```{r}
-#Investigating size-fractionated data for errors.
-
-#Calculating the number of filters for each size-fraction set
-chl_sf2 <- chl %>% 
-  filter(!is.na(analyzed) &
-           (is.na(chla_flag) | chla_flag == "AV" | chla_flag == "ADL" |
-              chla_flag == "SVC")) %>% 
-  filter(!filter_type == "Bulk GF/F") %>%
-  filter(!is.na(chla)) %>% 
-  group_by(collected, line_out_depth) %>% 
-  mutate(filt_num = n()) %>% 
-  ungroup()
-
-
-#Subsetting where there are 3 size-fractionated filters. 
-chl_sf2 <- chl_sf2 %>% 
-  filter(filt_num == 3)
- 
-
-chl_sf2 <- chl_sf2 %>% 
-  group_by(collected, line_out_depth, filter_type) %>% 
-  mutate(filt_unique = n()) %>% 
-  ungroup() %>% 
-  filter(filt_unique == 1)
-  
-```
-
-```{r}
-chl_sf2 <- arrange(mutate(chl_sf2, filter_type = factor(filter_type,
-                                              levels = order_sf)))
-```
-
-
-```{r}
-chl_sf2 %>%
-  filter(line_out_depth < 50 & !survey == "ZOOPSPRINT") %>% 
-  group_by(date, line_out_depth, filter_type) %>% 
-  summarise(chla_avg = mean(chla)) %>% 
-  ungroup() %>% 
-  ggplot(aes(x = date, y = chla_avg, fill = filter_type)) + 
-  geom_area(color = "black") +
-  scale_fill_brewer(palette = "Set1",
-                    labels = c(expression(Pico[CHL]),
-                               expression(Nano[CHL]),
-                               expression(Micro[CHL])),
-                    name = "") +
-  facet_grid(line_out_depth ~ ., scales = "free_y") +
-  labs(y = "Chla (ug/L)") +
-  theme_bw()+
-  theme(text = element_text(size = 25),
-        axis.title.x = element_blank(),
-        # axis.text.x = element_blank(),
         axis.text = element_text(colour = "black"),
-        legend.position = "top",
-        legend.direction = "horizontal",
-        legend.title = element_blank(),
-        strip.background = element_blank()) 
+        # axis.text.y = element_blank(),
+        # axis.title.y = element_blank(),
+        legend.position = "none") +
+  labs(fill = "Date", shape = "Station") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
+```
 
-ggsave(here("figures_qc", "SF_timeseries-depth.png"),
-        width = 16, height = 10, dpi = 300)
+```{r}
+fig <- f_gff + f_3um + f_20um + f_sf_sum
+
+ggsave(here("figures_qc", "scatter_rocky_duplicate.png"), fig,
+       width = 16, height = 16, dpi = 300)
 ```
 ```{r}
-chl_sf2 %>%
-  filter(line_out_depth == 5 & !survey == "ZOOPSPRINT") %>% 
-  group_by(date, line_out_depth, filter_type) %>% 
-  summarise(chla_avg = mean(chla)) %>% 
-  ungroup() %>% 
-  ggplot(aes(x = date, y = chla_avg, fill = filter_type)) + 
-  geom_area(color = "black") +
-  scale_fill_brewer(palette = "Set1",
-                    labels = c(expression(Pico[CHL]),
-                               expression(Nano[CHL]),
-                               expression(Micro[CHL])),
-                    name = "") +
-  facet_grid(line_out_depth ~ ., scales = "free_y") +
-  labs(y = "Chla (ug/L)") +
-  theme_bw()+
-  theme(text = element_text(size = 25),
-        axis.title.x = element_blank(),
-        # axis.text.x = element_blank(),
+
+mean <- um20 %>% 
+  summarise(median = mean(acid_ratio))
+
+f1 <- gff %>% 
+  ggplot(aes(x = acid_ratio)) +
+  geom_histogram(binwidth = 0.05, alpha = 0.5, color = "black") +
+  geom_vline(xintercept = 1.28) +
+  ylim(0, 15) +
+  xlim(1.0, 1.8) +
+  xlab(bquote("AR"["GFF"])) +
+  ylab("ROCKY Sample #") +
+  theme_bw() +
+  theme(text = element_text(size = 32),
         axis.text = element_text(colour = "black"),
-        legend.position = "top",
-        legend.direction = "horizontal",
-        legend.title = element_blank(),
-        strip.background = element_blank()) 
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "none") 
 
-ggsave(here("figures_qc", "SF_timeseries-depth-5.png"),
-        width = 16, height = 5, dpi = 300)
+f2 <- um3 %>% 
+  ggplot(aes(x = acid_ratio)) +
+  geom_histogram(binwidth = 0.05, alpha = 0.5, color = "black") +
+   geom_vline(xintercept = 1.27) +
+  ylim(0, 15) +
+  xlim(1.0, 1.8) +
+  xlab(bquote("AR"["3um"])) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.text = element_text(colour = "black"),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "none") 
 
+f3 <- um20 %>% 
+  ggplot(aes(x = acid_ratio)) +
+  geom_histogram(binwidth = 0.05, alpha = 0.5, color = "black") +
+  geom_vline(xintercept = 1.25) +
+  ylim(0, 15) +
+  xlim(1.0, 1.8) +
+  xlab(bquote("AR"["20um"])) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.text = element_text(colour = "black"),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "none")
+
+mean2 <- chl_kc10 %>% 
+  filter(!is.na(ar)) %>% 
+  group_by(filter_type) %>% 
+  summarise(mean = mean(ar))
+
+
+f4 <- chl_kc10 %>% 
+  filter(filter_type == "GF/F") %>% 
+  ggplot(aes(x = ar)) +
+  geom_histogram(binwidth = 0.05, alpha = 0.5, color = "black") +
+  geom_vline(xintercept = 1.42) +
+  ylim(0, 8) +
+  xlim(1.0, 1.8) +
+  xlab(bquote("AR"["GFF"])) +
+  ylab("KC10 Sample #") +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.text = element_text(colour = "black"),
+        # axis.text.y = element_blank(),
+        # axis.title.y = element_blank(),
+        legend.position = "none") 
+
+f5 <- chl_kc10 %>% 
+  filter(filter_type == "3um") %>% 
+  ggplot(aes(x = ar)) +
+  geom_histogram(binwidth = 0.05, alpha = 0.5, color = "black") +
+  geom_vline(xintercept = 1.51) +
+  ylim(0, 8) +
+  xlim(1.0, 1.8) +
+  xlab(bquote("AR"["3um"])) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.text = element_text(colour = "black"),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "none") 
+
+f6 <- chl_kc10 %>% 
+  filter(filter_type == "20um") %>% 
+  ggplot(aes(x = ar)) +
+  geom_histogram(binwidth = 0.05, alpha = 0.5, color = "black") +
+  geom_vline(xintercept = 1.50) +
+  ylim(0, 8) +
+  xlim(1.0, 1.8) +
+  xlab(bquote("AR"["20um"])) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.text = element_text(colour = "black"),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "none") 
+
+
+ar_fig <- f1 + f2 + f3 + f4 + f5 +f6
+
+ggsave(here("figures_qc", "histo_ar_rocky.png"), ar_fig,
+       width = 16, height = 12, dpi = 300)
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
