@@ -1,0 +1,869 @@
+---
+title: "HPLC QC"
+output: html_notebook
+---
+
+Working on a way to QC all of the HPLC data. Here, I am focusing on QU39.
+
+
+```{r}
+#Upload packages
+library(tidyverse)
+library(here)
+library(patchwork)
+library(readxl)
+```
+
+```{r}
+#Uploading Chlorophyll -  the date is the upload date from the portal
+chl <- read_csv(here("files", "chl_2023-01-09.csv"))
+
+#Upload HPLC data
+hplc <- read_csv(here("files", "hplc_qu39_2023-01-04_2.csv"))
+
+```
+
+```{r}
+#Selecting relevant columns
+chl <- chl %>% 
+  select(date, site_id, survey, line_out_depth, collected, analyzed, hakai_id, 
+         calibration:calibration_slope, filter_type, before_acid, after_acid,
+         acid_flag, dilution_factor, chla, chla_flag, phaeo, phaeo_flag) 
+
+#Adding month column
+chl <- chl %>% 
+  mutate(month = lubridate::month(date)) %>% 
+  relocate(month, .after = date)
+```
+
+```{r}
+#Wrangling hplc dataset
+
+#Selecting important columns and limiting to records with results
+hplc <- hplc %>% 
+  filter(!is.na(all_chl_a)) %>% 
+  select(date, collected, id_hplc = hakai_id,
+         analyzed_hplc = analyzed, line_out_depth, all_chl_a)
+```
+
+
+
+```{r}
+#Pulling out all samples that haven't been QC'd on the new module. 
+# chl_qc <- chl %>% 
+#   filter(!is.na(analyzed) &
+#            (is.na(chla_flag) | chla_flag == "AV" | chla_flag == "ADL"))
+```
+
+
+```{r}
+#Investigating bulk data for errors
+
+#Pulling out the bulk filters
+chl_bulk <- chl %>% 
+  filter(filter_type == "Bulk GF/F")
+
+```
+
+```{r}
+#Looking at bulk data - timeseries
+
+#One sample sticks out - 5m directly before spring bloom in 2021 - new un-QC'd sample
+
+chl_bulk %>%
+  filter(line_out_depth < 50) %>% 
+  ggplot(aes(x = date, y = chla)) +
+  geom_point(aes(fill = chla_flag), pch = 21, size = 3.0) +
+  geom_line(size = 1) +
+  geom_point(data = hplc, aes(x = date, y = all_chl_a), pch = 22, fill = "green",
+             alpha = 0.4, size = 3) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+  
+ggsave(here("figures_qc", "TEST.png"),
+        width = 16, height = 12, dpi = 300)
+```
+
+```{r}
+#Joining HPLC with chlorophyll
+
+chl_bulk2 <- chl_bulk %>% 
+  full_join(hplc)
+
+chl_bulk2 <- chl_bulk2 %>% 
+  mutate(analyzed_hplc = lubridate::date(analyzed_hplc))
+
+```
+
+
+
+
+```{r}
+#Looking at bulk data - timeseries with only data that hasn't been flagged
+
+#The 5m pre-2021 spring bloom sample may be HPLC issue - possible is the wrong sample?
+#Looks like some HPLC was missing from an important period in 2021 - samples that didn't get sent?
+
+chl_bulk2 %>%
+  filter(!is.na(chla) & !is.na(all_chl_a)) %>% 
+  filter(line_out_depth < 50 & is.na(chla_flag) & date > "2021-01-01") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  geom_point(aes(y = all_chl_a), pch = 22, fill = "green",
+             alpha = 0.4, size = 3) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+  
+
+#Should add HPLC and fluorescence to this and print for viewing.
+ggsave(here("figures_qc", "timeseries_qu39_bulk_no-flag_2023-01-04.png"),
+        width = 16, height = 12, dpi = 300)
+```
+
+
+```{r}
+#Plotting hplc against bulk chl
+
+#Plotting all data with ADL flags a separate group with a separate regression line
+chl_bulk2 %>% 
+  ggplot(aes(x = all_chl_a, y = chla, fill = chla_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = chla_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0,25) +
+  ylim(0,25) +
+  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
+  theme_bw() +
+  theme()
+
+#Very odd trend as it would be expected that samples that weren't diluted would saturate the fluorometer and result in lower chla per HPLC TChla. Here the values are higher, although the trend line is <1, so higher values would go below 1:1 line and under-predict.
+
+#The new HPLC to chla with the diluted samples has 1:1 slope. Never had this before.
+```
+
+
+```{r}
+#Same plot as above but in log10 scale
+chl_bulk2 %>% 
+  ggplot(aes(x = log10(all_chl_a), y = log10(chla), fill = chla_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = chla_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  ylim(-2, 2) +
+  theme_bw() +
+  theme()
+
+#Definitely some outlier samples here that could have issues
+```
+
+Look at relationship of samples by shipment
+
+```{r}
+#Make a list of samples from the first and second shipment
+
+ship_2_list <- c("QX9927", "QX9928", "QX9929", "QX9930", "QX9442", "QX9443",
+                 "QX9444", "QX9445", "QX9447", "QX9448", "QX9449", "QX9450",
+                 "QX9451", "QX9452", "QX9453", "QX9455", "QX9456", "QX9457",
+                 "QX9458", "QX9459", "QX9460", "QX9461", "QX9463", "QX9464", 
+                 "QX9465", "QX9466", "QX9467", "QX9468", "QX9469", "QX9471",
+                 "QX9472", "QX9473", "QX9474", "QX9475", "QX9476", "QX9477",
+                 "QX9479", "QX9480", "QX9481", "QX9482", "QX9483", "QX9484",
+                 "QX9485", "QX9487", "QX9488", "QX9489", "QX9490", "QX9491",
+                 "QX9492", "QX9493", "QX9932", "QX9933", "QX9934", "CX8411",
+                 "CX8412", "QX9938", "QX9939", "QX9940", "QX9941")
+
+chl_bulk3 <- chl_bulk2 %>% 
+  mutate(shipment = case_when(analyzed_hplc == "2022-11-30" & 
+                                id_hplc %in% ship_2_list ~ "2022-11-2",
+                              analyzed_hplc == "2022-11-30" & 
+                                !id_hplc %in% ship_2_list ~ "2022-11-1",
+                              analyzed_hplc > "2021-01-01" & 
+                              analyzed_hplc < "2021-12-31" ~ "2021",
+                              !analyzed_hplc == "2022-11-30" ~ 
+                                as.character(analyzed_hplc)))
+```
+
+
+```{r}
+chl_bulk3 %>% 
+  filter(!is.na(chla) & !is.na(all_chl_a)) %>% 
+  filter(line_out_depth < 50) %>% 
+  filter(chla_flag == "AV" | is.na(chla_flag)) %>%
+  ggplot(aes(x = all_chl_a, y = chla, fill = shipment)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = shipment), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  scale_color_brewer(palette = "RdYlBu") +
+  xlim(0,25) +
+  ylim(0,25) +
+  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
+  theme_bw() +
+  theme()
+```
+```{r}
+chl_bulk3 %>% 
+  filter(line_out_depth < 50 & shipment == "2018-05-28") %>%
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_grid(. ~ shipment) +
+  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
+  theme_bw() +
+  theme()
+```
+```{r}
+chl_bulk3 %>%
+  filter(line_out_depth < 50) %>% 
+  filter(date > "2016-01-01" & date < "2016-12-21") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  geom_point(aes(y = all_chl_a, fill = shipment), pch = 23, size = 2,
+             color = "black", stroke = 1.5) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+
+ggsave(here("figures_qc", "hplc_shipment_2018-timeseries.png"),
+        width = 16, height = 12, dpi = 300)
+```
+```{r}
+chl %>%
+  filter(date > "2016-01-01" & date < "2016-12-31" & filter_type == "Bulk GF/F") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+chl_bulk3 %>%
+  filter(!is.na(chla) & !is.na(all_chl_a)) %>% 
+  filter(line_out_depth < 50 & is.na(chla_flag) & date > "2021-01-01") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  geom_point(aes(y = all_chl_a, fill = shipment), pch = 22,
+             alpha = 0.8, size = 3) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+
+ggsave(here("figures_qc", "timeseries_qu39_bulk_no-flag_2023-01-05_shipment.png"),
+        width = 16, height = 12, dpi = 300)
+```
+
+```{r}
+chl_bulk3 %>% 
+  filter(!is.na(chla) & !is.na(all_chl_a)) %>% 
+  filter(line_out_depth < 50 & is.na(chla_flag) & date > "2021-01-01") %>%
+  ggplot(aes(x = all_chl_a, y = chla, fill = shipment)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(fill = shipment), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0,25) +
+  ylim(0,25) +
+  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
+  theme_bw() +
+  theme()
+```
+
+```{r}
+
+chl_bulk3 %>% 
+  filter(!is.na(chla) & !is.na(all_chl_a)) %>% 
+  filter(line_out_depth < 50 & is.na(chla_flag) & date > "2021-01-01") %>%
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_grid(. ~ shipment) +
+  xlim(0,25) +
+  ylim(0,25) +
+  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
+  theme_bw() +
+  theme()
+
+```
+
+
+
+
+
+```{r}
+chl_bulk3 %>% 
+  filter(!is.na(chla) & !is.na(all_chl_a)) %>% 
+  filter(line_out_depth < 50) %>% 
+  filter(chla_flag == "AV" | is.na(chla_flag)) %>%
+  ggplot(aes(x = all_chl_a, y = chla, fill = shipment)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = shipment), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  scale_color_brewer(palette = "RdYlBu") +
+  xlim(0,25) +
+  ylim(0,25) +
+  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
+  theme_bw() +
+  theme()
+```
+```{r}
+chl_bulk3 %>% 
+  filter(!is.na(chla) & !is.na(all_chl_a)) %>% 
+  filter(analyzed_hplc > "2021-01-01" & date < "2022-01-01") %>% 
+  filter(line_out_depth < 50) %>% 
+  filter(chla_flag == "AV" | is.na(chla_flag)) %>%
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  scale_color_brewer(palette = "RdYlBu") +
+  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
+  theme_bw() +
+  theme()
+```
+
+
+
+```{r}
+hplc %>%
+  filter(!is.na(all_chl_a)) %>% 
+  filter(date > "2021-01-01") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = all_chl_a), pch = 21, size = 3.0) +
+  geom_line(aes(y = all_chl_a), size = 1) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+
+ggsave(here("figures_qc", "timeseries_qu39_bulk_no-flag_2023-01-05_only_hplc.png"),
+        width = 16, height = 12, dpi = 300)
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#Plotting regression of only data without a QC flag
+chl_bulk %>% 
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0,25) +
+  ylim(0,25) +
+  theme_bw() +
+  theme()
+
+#Of the data that hasn't been QC'd, there are a few concerning points of very low chla for high TChla - What is the sample that has around 8 for TChla and a 2 for Bulk? From 2021-04-14, 0m, but don't see it on the time-series
+
+```
+```{r}
+#Looking into the 2021-04-14 sample that has high TChla and low Chla. Can't see clearly on the longer timeseries because data so close together. Issue with TChla or Bulk? No acid ratio issue. 
+
+#No QC notes and SF-Sum more comparable to Bulk than TChla. CTD is low, but could have been quenched due to high PAR.
+
+#Likely an issue with the HPLC as we had problems with this batch. Need to troublshoot separately.
+
+chl_bulk %>%
+  filter(line_out_depth == 5 & is.na(chla_flag) & date > "2021-01-01" &
+           date < "2022-01-01") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  geom_point(aes(y = all_chl_a), pch = 22, fill = "green",
+             alpha = 0.4, size = 3) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+```
+
+```{r}
+
+#Same plot as above but in log10 scale
+chl_bulk %>% 
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = log10(all_chl_a), y = log10(chla))) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  ylim(-2, 2) +
+  theme_bw() +
+  theme()
+
+#Some low concentration samples that have low acid ratios and much lower chla when compared to TChla.
+```
+```{r}
+#I want to isolate these two samples with low ARs -  these are only samples that have corresponding HPLC
+check_bulk_ar_2 <- chl_bulk %>% 
+  filter(is.na(chla_flag) & !is.na(all_chl_a) & acid_ratio < 1.2 &
+           line_out_depth < 50)
+
+#QCHL13547 - SVD
+#QCHL12693 - Probably OK -  not sure about whether SVC needed.
+
+```
+
+
+```{r}
+#Setting up sheet so I can plot relationships by analysis day
+chl_bulk <- chl_bulk %>% 
+  mutate(analyzed_date = lubridate::date(analyzed)) %>% 
+  relocate(analyzed_date, .after = analyzed)
+```
+
+
+```{r}
+#Plotting bulk chlorophyll versus HPLC TChla by analysis day - only works for 2021 data 
+chl_bulk %>% 
+  filter(is.na(chla_flag)) %>% 
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~ as.factor(analyzed_date), scales = "free" ) +
+  # xlim(0,25) +
+  # ylim(0,25) +
+  theme_bw() +
+  theme()
+
+ggsave(here("figures_qc", "analysis_day_chl_hplc_comparison.png"),
+        width = 16, height = 12, dpi = 300)
+
+#This is somewhat enlightening as it makes it easier to pinpoint samples that don't match well. For instance, 2021-05-15.
+
+#What sample was this?
+
+test <- chl_bulk %>% 
+  filter(analyzed_date == "2021-05-15")
+
+#Weird - from 2021-01-27 where HPLC is almost 5 ug/L??? Is the 5m outlier in the timeseries plot.
+#Need to check into this HPLC. QCHL12177 is the chlorophyll sample
+#No indication from SF-Sum or CTD that there was some sort of early bloom.
+
+```
+
+```{r}
+#Looking at samples that were collected in the surface waters and have low acid ratios. Not dependent on having an HPLc match as was above.
+check_bulk_ar <- chl_bulk %>% 
+  filter(is.na(chla_flag) & acid_ratio < 1.2 & line_out_depth < 50)
+
+#Quite a few samples from 20 and 30m that do not have HPLC match and not captured by earlier plots/test. First line of defense should probably be SF-Sum comparisons. 
+
+
+```
+
+
+Does this give me enough to fully QC the Bulk data?
+
+```{r}
+#Investigating size-fractionated data for errors.
+
+#Calculating the number of filters for each size-fraction set
+chl_sf <- chl_qc %>% 
+  filter(!filter_type == "Bulk GF/F") %>%
+  filter(!is.na(chla)) %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(filt_num = n()) %>% 
+  ungroup()
+
+#Looking for size fraction sets that have less than 3 filters - 119 observations - I'd imagine a lot of SVC and SVD flags for single filter.
+check_sf_low <- chl_sf %>% 
+  filter(filt_num < 3)
+
+#Looking at size fraction sets that have more than 3 filters. Some are just replicated hakai IDS, but quite a few from zoopsprint - I wonder if one of the GF/Fs is meant to be bulk.
+check_sf_high <- chl_sf %>% 
+  filter(filt_num > 3)
+
+#Subsetting where there are 3 size-fractionated filters. 
+chl_sf <- chl_sf %>% 
+  filter(filt_num == 3)
+
+#Querying replicated filter types within a set - two examples where there are two duplicated filters within a 3 filter set. Only one is not QC'd - check metadata note.
+check_sf_dup <- chl_sf %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique > 1)  
+ 
+
+chl_sf <- chl_sf %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique == 1)
+  
+```
+
+```{r}
+#Calculating the size-fractionated sum for comparison with the bulk
+chl_sf_sum <- chl_sf %>% 
+  filter(chla_flag == "AV" | chla_flag == "ADL" | is.na(chla_flag)) %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(sf_sum = sum(chla)) %>% 
+  ungroup() %>% 
+  distinct(collected, line_out_depth, sf_sum, .keep_all = TRUE) %>% 
+  select(collected, line_out_depth, sf_sum)
+
+#Merging with the size-fractionated data for comparison.
+chl_comp <- chl_bulk %>%
+  select(date, collected, analyzed_date, line_out_depth, bulk_chla = chla,
+         bulk_flag = chla_flag, all_chl_a) %>% 
+  filter(line_out_depth < 99) %>% 
+  left_join(chl_sf_sum)
+
+#Looking why there are NAs in join. All from where SF did not have 3 filters in set.
+check_comp_na <- chl_comp %>% 
+  filter(is.na(bulk_chla) | is.na(sf_sum))
+
+```
+
+```{r}
+#Plotting sf_sum against bulk chl - Something is up with my join.
+chl_comp %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum, fill = bulk_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = bulk_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0, 30) +
+  ylim(0, 30) +
+  theme_bw() +
+  theme()
+
+#To me this looks pretty darn good - the samples with ADL may have a trend to higher size fractionated sum at higher concentrations.
+
+#Now looks like there a couple of samples with low SF-Sum
+
+```
+
+```{r}
+chl_comp %>% 
+  ggplot(aes(x = log10(bulk_chla), y = log10(sf_sum), fill = bulk_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(aes(color = bulk_flag), method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0, 30) +
+  # ylim(0, 30) +
+  theme_bw() +
+  theme()
+```
+
+```{r}
+chl_comp %>% 
+  ggplot(aes(x = all_chl_a, y = sf_sum, fill = bulk_flag)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm') +
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0,30) +
+  ylim(0,30) +
+  theme_bw() +
+  theme()
+```
+
+
+```{r}
+#Looking at SF-Sum versus other metrics
+chl_comp %>%
+  filter(line_out_depth < 50 & is.na(bulk_flag) & date > "2019-01-01") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = bulk_chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = bulk_chla), size = 1) +
+  geom_point(aes(y = sf_sum), pch = 21, size = 3.0, color = "red") +
+  geom_line(aes(y = sf_sum), size = 1, color = "red") +
+  geom_point(aes(y = all_chl_a), pch = 22, fill = "green",
+             alpha = 0.4, size = 3) +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  theme_bw() +
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+  
+ggsave(here("figures_qc", "timeseries_qu39_bulk-SF_no-flag.png"),
+        width = 16, height = 12, dpi = 300)
+
+#Some clear discrepencies here.
+
+#0m
+#one point where much lower mid 2021
+#One point where much lower second bloom 2022
+
+#5m
+#One point much lower SB 2022
+
+#10m
+#One point much lower second bloom 2022
+
+```
+
+```{r}
+
+chl_comp %>% 
+  filter(is.na(bulk_flag)) %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~ (as.factor(analyzed_date)), scales = "free" ) +
+  theme_bw() +
+  theme()
+
+ggsave(here("figures_qc", "test2.png"),
+        width = 16, height = 12, dpi = 300)
+
+
+
+sf_check <- chl_comp %>% 
+  filter(analyzed_date == "2022-09-04")
+
+#QCHL14258 - 2022-04-21, 0m. Nothing noticeably wrong with sample and no metadata notes. Just quite a bit lower than bulk. What is correct?
+
+#QCHL14266 - 2022-04-01, 10m. Nothing noticeably wrong with the sample and no metadata notes. Just quite a bit lower than Bulk. Which measure is correct? No HPLC yet. Check CTD about 7ug/L, which is closer to the SF-Sum.
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#Looking at specific samples that were left in TULA freezer for extended period
+chl_bulk %>% 
+  filter(date == "2021-05-18") %>% 
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = acid_ratio > 1.2), pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0, 1) +
+  # ylim(0, 1) +
+  theme_bw() +
+  theme()
+
+test <- chl_bulk %>% 
+  filter(date == "2021-05-18") 
+
+
+#Looking at specific samples that were left in TULA freezer for extended period
+chl_comp %>% 
+  filter(date == "2020-08-04") %>% 
+  ggplot(aes(x = bulk_chla, y = sf_sum)) +
+  geom_point(pch = 21, size = 3.0) +
+  geom_smooth(method = 'lm', color = "red", fill = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  # xlim(0, 5) +
+  # ylim(0, 5) +
+  theme_bw() +
+  theme()
+```
+
+```{r}
+#Let's plot the entire SF timeseries
+#Order phytoplankton groups roughly from smallest to largest - create order list
+
+order_sf <- c("GF/F", "3um", "20um")
+
+#Chemtax - Specify order of phyto groups for figures
+chl_sf <- arrange(mutate(chl_sf, filter_type = factor(filter_type,
+                                              levels = order_sf)))
+
+
+chl_sf %>%
+  filter(line_out_depth == 0) %>% 
+  ggplot(aes(x = date, y = chla, fill = filter_type)) + 
+  geom_area(color = "black") +
+  scale_fill_brewer(palette = "Set1", labels = c(expression(Pico[CHL]),
+                                                   expression(Nano[CHL]),
+                                                   expression(Micro[CHL]))) +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  theme_bw()
+
+ggsave(here("figures_qc", "SF_test.png"),
+        width = 16, height = 6, dpi = 300)
+
+
+#Some issues with plotting need to be investigated.
+```
+
+```{r}
+#Pulling out all samples that haven't been QC'd on the new module. 
+chl_qc2 <- chl %>% 
+  filter(!is.na(analyzed) &
+           (is.na(chla_flag) | chla_flag == "AV" | chla_flag == "ADL"))
+
+#Pulling out all QC'd data
+chl_av <- chl %>% 
+  filter(chla_flag == "AV")
+
+```
+
+
+```{r}
+#Investigating size-fractionated data for errors.
+
+#Calculating the number of filters for each size-fraction set
+chl_sf2 <- chl %>% 
+  filter(!is.na(analyzed) &
+           (is.na(chla_flag) | chla_flag == "AV" | chla_flag == "ADL" |
+              chla_flag == "SVC")) %>% 
+  filter(!filter_type == "Bulk GF/F") %>%
+  filter(!is.na(chla)) %>% 
+  group_by(collected, line_out_depth) %>% 
+  mutate(filt_num = n()) %>% 
+  ungroup()
+
+
+#Subsetting where there are 3 size-fractionated filters. 
+chl_sf2 <- chl_sf2 %>% 
+  filter(filt_num == 3)
+ 
+
+chl_sf2 <- chl_sf2 %>% 
+  group_by(collected, line_out_depth, filter_type) %>% 
+  mutate(filt_unique = n()) %>% 
+  ungroup() %>% 
+  filter(filt_unique == 1)
+  
+```
+
+```{r}
+chl_sf2 <- arrange(mutate(chl_sf2, filter_type = factor(filter_type,
+                                              levels = order_sf)))
+```
+
+
+```{r}
+chl_sf2 %>%
+  filter(line_out_depth < 50 & !survey == "ZOOPSPRINT") %>% 
+  group_by(date, line_out_depth, filter_type) %>% 
+  summarise(chla_avg = mean(chla)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = date, y = chla_avg, fill = filter_type)) + 
+  geom_area(color = "black") +
+  scale_fill_brewer(palette = "Set1",
+                    labels = c(expression(Pico[CHL]),
+                               expression(Nano[CHL]),
+                               expression(Micro[CHL])),
+                    name = "") +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  labs(y = "Chla (ug/L)") +
+  theme_bw()+
+  theme(text = element_text(size = 25),
+        axis.title.x = element_blank(),
+        # axis.text.x = element_blank(),
+        axis.text = element_text(colour = "black"),
+        legend.position = "top",
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        strip.background = element_blank()) 
+
+ggsave(here("figures_qc", "SF_timeseries-depth.png"),
+        width = 16, height = 10, dpi = 300)
+```
+```{r}
+chl_sf2 %>%
+  filter(line_out_depth == 5 & !survey == "ZOOPSPRINT") %>% 
+  group_by(date, line_out_depth, filter_type) %>% 
+  summarise(chla_avg = mean(chla)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = date, y = chla_avg, fill = filter_type)) + 
+  geom_area(color = "black") +
+  scale_fill_brewer(palette = "Set1",
+                    labels = c(expression(Pico[CHL]),
+                               expression(Nano[CHL]),
+                               expression(Micro[CHL])),
+                    name = "") +
+  facet_grid(line_out_depth ~ ., scales = "free_y") +
+  labs(y = "Chla (ug/L)") +
+  theme_bw()+
+  theme(text = element_text(size = 25),
+        axis.title.x = element_blank(),
+        # axis.text.x = element_blank(),
+        axis.text = element_text(colour = "black"),
+        legend.position = "top",
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        strip.background = element_blank()) 
+
+ggsave(here("figures_qc", "SF_timeseries-depth-5.png"),
+        width = 16, height = 5, dpi = 300)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
