@@ -57,116 +57,28 @@ hplc <- hplc %>%
 
 
 ```{r}
-#Investigating bulk data for errors
-
 #Pulling out the bulk filters
 chl_bulk <- chl %>% 
   filter(filter_type == "Bulk GF/F")
 
 ```
 
-```{r}
-#Looking at bulk data - timeseries
-
-#One sample sticks out - 5m directly before spring bloom in 2021 - new un-QC'd sample
-
-chl_bulk %>%
-  filter(line_out_depth < 50) %>% 
-  ggplot(aes(x = date, y = chla)) +
-  geom_point(aes(fill = chla_flag), pch = 21, size = 3.0) +
-  geom_line(size = 1) +
-  geom_point(data = hplc, aes(x = date, y = all_chl_a), pch = 22, fill = "green",
-             alpha = 0.4, size = 3) +
-  facet_grid(line_out_depth ~ .) +
-  theme_bw() +
-  labs(fill = "Flag") +
-  theme(text = element_text(size = 32),
-        axis.title.x = element_blank())
-  
-ggsave(here("figures_qc", "TEST.png"),
-        width = 16, height = 12, dpi = 300)
-```
 
 ```{r}
 #Joining HPLC with chlorophyll
 
-chl_bulk2 <- chl_bulk %>% 
+#Doing full join so that all data is included. 
+bulk_hplc <- chl_bulk %>% 
   full_join(hplc)
 
-chl_bulk2 <- chl_bulk2 %>% 
+#Making HPLC analyzed date_time into just date.
+bulk_hplc <- chl_bulk2 %>% 
   mutate(analyzed_hplc = lubridate::date(analyzed_hplc))
 
 ```
-
-
-
-
 ```{r}
-#Looking at bulk data - timeseries with only data that hasn't been flagged
 
-#The 5m pre-2021 spring bloom sample may be HPLC issue - possible is the wrong sample?
-#Looks like some HPLC was missing from an important period in 2021 - samples that didn't get sent?
-
-chl_bulk2 %>%
-  filter(!is.na(chla) & !is.na(all_chl_a)) %>% 
-  filter(line_out_depth < 50 & is.na(chla_flag) & date > "2021-01-01") %>% 
-  ggplot(aes(x = date)) +
-  geom_point(aes(y = chla), pch = 21, size = 3.0) +
-  geom_line(aes(y = chla), size = 1) +
-  geom_point(aes(y = all_chl_a), pch = 22, fill = "green",
-             alpha = 0.4, size = 3) +
-  facet_grid(line_out_depth ~ .) +
-  theme_bw() +
-  labs(fill = "Flag") +
-  theme(text = element_text(size = 32),
-        axis.title.x = element_blank())
-  
-
-#Should add HPLC and fluorescence to this and print for viewing.
-ggsave(here("figures_qc", "timeseries_qu39_bulk_no-flag_2023-01-04.png"),
-        width = 16, height = 12, dpi = 300)
-```
-
-
-```{r}
-#Plotting hplc against bulk chl
-
-#Plotting all data with ADL flags a separate group with a separate regression line
-chl_bulk2 %>% 
-  ggplot(aes(x = all_chl_a, y = chla, fill = chla_flag)) +
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(aes(color = chla_flag), method = 'lm') +
-  geom_abline(intercept = 0, slope = 1) +
-  xlim(0,25) +
-  ylim(0,25) +
-  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
-  theme_bw() +
-  theme()
-
-#Very odd trend as it would be expected that samples that weren't diluted would saturate the fluorometer and result in lower chla per HPLC TChla. Here the values are higher, although the trend line is <1, so higher values would go below 1:1 line and under-predict.
-
-#The new HPLC to chla with the diluted samples has 1:1 slope. Never had this before.
-```
-
-
-```{r}
-#Same plot as above but in log10 scale
-chl_bulk2 %>% 
-  ggplot(aes(x = log10(all_chl_a), y = log10(chla), fill = chla_flag)) +
-  geom_point(pch = 21, size = 3.0) +
-  geom_smooth(aes(color = chla_flag), method = 'lm') +
-  geom_abline(intercept = 0, slope = 1) +
-  ylim(-2, 2) +
-  theme_bw() +
-  theme()
-
-#Definitely some outlier samples here that could have issues
-```
-
-Look at relationship of samples by shipment
-
-```{r}
-#Make a list of samples from the first and second shipment
+#Making a shipment column so that I can filter by shipment. In 2022, two shipments were sent back to back. Blow are the samples that were sent in the second shipment. There was no easier way to do this because they were all analyzed on the same day and there was not other differentiating information
 
 ship_2_list <- c("QX9927", "QX9928", "QX9929", "QX9930", "QX9442", "QX9443",
                  "QX9444", "QX9445", "QX9447", "QX9448", "QX9449", "QX9450",
@@ -179,7 +91,7 @@ ship_2_list <- c("QX9927", "QX9928", "QX9929", "QX9930", "QX9442", "QX9443",
                  "QX9492", "QX9493", "QX9932", "QX9933", "QX9934", "CX8411",
                  "CX8412", "QX9938", "QX9939", "QX9940", "QX9941")
 
-chl_bulk3 <- chl_bulk2 %>% 
+bulk_hplc <- bulk_hplc %>% 
   mutate(shipment = case_when(analyzed_hplc == "2022-11-30" & 
                                 id_hplc %in% ship_2_list ~ "2022-11-2",
                               analyzed_hplc == "2022-11-30" & 
@@ -188,38 +100,207 @@ chl_bulk3 <- chl_bulk2 %>%
                               analyzed_hplc < "2021-12-31" ~ "2021",
                               !analyzed_hplc == "2022-11-30" ~ 
                                 as.character(analyzed_hplc)))
+
 ```
 
+```{r}
+#Plotting HPLC and Bulk Chlorophyll for the full Qu39 timeseries including all depths.
+
+bulk_hplc %>%
+  filter(line_out_depth < 50) %>% 
+  ggplot(aes(x = date, y = chla)) +
+  geom_point(aes(fill = chla_flag), pch = 21, size = 3.0) +
+  geom_line(size = 1) +
+  geom_point(aes(x = date, y = all_chl_a), pch = 22, fill = "green",
+             alpha = 0.4, size = 3) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  labs(fill = "Flag") +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+  
+ggsave(here("figures_qc", "timeseries_qu39_bulk_hplc_full-dataset.png"),
+        width = 16, height = 12, dpi = 300)
+```
 
 ```{r}
-chl_bulk3 %>% 
-  filter(!is.na(chla) & !is.na(all_chl_a)) %>% 
-  filter(line_out_depth < 50) %>% 
-  filter(chla_flag == "AV" | is.na(chla_flag)) %>%
-  ggplot(aes(x = all_chl_a, y = chla, fill = shipment)) +
+#Plotting hplc against bulk chl in scatter plot by bulk chl flag type. Removing SVD flags. NA flags are data that have not been flagged yet.
+
+#Plotting all data with ADL flags a separate group with a separate regression line
+bulk_hplc %>%
+  filter(chla_flag == "SVC" | chla_flag == "AV" | chla_flag == "ADL" |
+           is.na(chla_flag)) %>%
+  ggplot(aes(x = all_chl_a, y = chla, fill = chla_flag)) +
   geom_point(pch = 21, size = 3.0) +
-  geom_smooth(aes(color = shipment), method = 'lm') +
+  geom_smooth(aes(color = chla_flag), method = 'lm') +
   geom_abline(intercept = 0, slope = 1) +
-  scale_fill_brewer(palette = "RdYlBu") +
-  scale_color_brewer(palette = "RdYlBu") +
   xlim(0,25) +
   ylim(0,25) +
   ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
   theme_bw() +
   theme()
+
 ```
+
 ```{r}
-chl_bulk3 %>% 
-  filter(line_out_depth < 50 & shipment == "2018-05-28") %>%
-  ggplot(aes(x = all_chl_a, y = chla)) +
+#Doing the same plot as above, but faceting by HPLC shipment
+
+
+#Plotting all data with ADL flags a separate group with a separate regression line
+bulk_hplc %>%
+  filter(!is.na(shipment)) %>% 
+  filter(chla_flag == "AV" | chla_flag == "ADL" |
+           is.na(chla_flag)) %>%
+  ggplot(aes(x = all_chl_a, y = chla, fill = chla_flag)) +
   geom_point(pch = 21, size = 3.0) +
-  geom_smooth(method = 'lm') +
+  geom_smooth(aes(color = chla_flag), method = 'lm') +
   geom_abline(intercept = 0, slope = 1) +
   facet_grid(. ~ shipment) +
-  ggtitle("HPLC TChla vs. Fluorometric Chla - QU39") +
   theme_bw() +
   theme()
+
+ggsave(here("figures_qc", "scatter_bulk_hplc_qu39_by-shipment.png"),
+        width = 16, height = 4, dpi = 300)
 ```
+```{r}
+#Now I want to go shipment by shipment and QC the HPLC data - Chlorophyll QC will be next.
+bulk_hplc %>%
+  filter(shipment == "2018-05-28") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  geom_point(aes(y = all_chl_a), pch = 23, size = 2,
+             color = "black", fill = "darkgreen", stroke = 1.5) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+
+ggsave(here("figures_qc", "timeseries_qu39_hplc_shipment_2018-05-28.png"),
+        width = 16, height = 12, dpi = 300)
+
+
+ship_2018 <- bulk_hplc %>% 
+  filter(shipment == "2018-05-28")
+
+#QX18 needs flag (2015-04-14, 5m) - missed bloom
+#QX1960 (2016-04-28, 5m) needs a flag - order of magnitude lower than Chl - cross check other measures
+#QX3182
+#QX3181 (2018-08-22, 5 and 10m) - 5m especially drastically underestimated bloom
+
+#Other than that I think we are ok. Move forward with QCing these data.
+
+```
+
+```{r}
+#Now I want to go shipment by shipment and QC the HPLC data - Chlorophyll QC will be next.
+bulk_hplc %>%
+  filter(shipment == "2019-04-20" & date > "2017-01-01") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla, fill = chla_flag), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  geom_point(aes(y = all_chl_a), pch = 23, size = 2,
+             color = "black", fill = "darkgreen", stroke = 1.5) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+
+ggsave(here("figures_qc", "timeseries_qu39_hplc_shipment_2019-04-20.png"),
+        width = 16, height = 12, dpi = 300)
+
+
+ship_2019 <- bulk_hplc %>% 
+  filter(shipment == "2019-04-20")
+
+#Some data are not matching because HPLC was collected at the same time as a set of replicates sent to DFO. 2018-04-12. I guess this is where the previos plot where the data were separate would come in handy.
+
+#A lot of variability here, but I think the data is pretty good. Used it all in the manuscript. With exception to 0m data.
+```
+```{r}
+#Now I want to go shipment by shipment and QC the HPLC data - Chlorophyll QC will be next.
+bulk_hplc %>%
+  filter(shipment == "2020-03-28") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla, fill = chla_flag), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  geom_point(aes(y = all_chl_a), pch = 23, size = 2,
+             color = "black", fill = "darkgreen", stroke = 1.5) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+
+ggsave(here("figures_qc", "timeseries_qu39_hplc_shipment_2020-03-28.png"),
+        width = 16, height = 12, dpi = 300)
+
+
+ship_2020 <- bulk_hplc %>% 
+  filter(shipment == "2020-03-28")
+
+
+#All of this data looks bang on to me
+
+```
+```{r}
+#Now I want to go shipment by shipment and QC the HPLC data - Chlorophyll QC will be next.
+bulk_hplc %>%
+  filter(shipment == "2021") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla, fill = chla_flag), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  geom_point(aes(y = all_chl_a), pch = 23, size = 2,
+             color = "black", fill = "darkgreen", stroke = 1.5) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+
+ggsave(here("figures_qc", "timeseries_qu39_hplc_shipment_2021.png"),
+        width = 16, height = 12, dpi = 300)
+
+
+ship_2020 <- bulk_hplc %>% 
+  filter(shipment == "2021")
+
+
+#Trends are pretty good, but blooms are underestimated.
+
+```
+```{r}
+#Now I want to go shipment by shipment and QC the HPLC data - Chlorophyll QC will be next.
+bulk_hplc %>%
+  filter(shipment == "2022-11-1" | shipment == "2022-11-2") %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = chla), pch = 21, size = 3.0) +
+  geom_line(aes(y = chla), size = 1) +
+  geom_point(aes(y = all_chl_a), pch = 23, size = 2,
+             color = "black", fill = "darkgreen", stroke = 1.5) +
+  facet_grid(line_out_depth ~ .) +
+  theme_bw() +
+  theme(text = element_text(size = 32),
+        axis.title.x = element_blank())
+
+ggsave(here("figures_qc", "timeseries_qu39_hplc_shipment_2022-11-1.png"),
+        width = 16, height = 12, dpi = 300)
+
+
+ship_2020 <- bulk_hplc %>% 
+  filter(shipment == "2021-11-1")
+
+
+#Trends are pretty good, but blooms are underestimated.
+
+```
+
+
+
+That covers all of the HPLC shipments. Just need to apply the flags.
+
+
+
+
+
 ```{r}
 chl_bulk3 %>%
   filter(line_out_depth < 50) %>% 
