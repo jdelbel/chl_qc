@@ -1,0 +1,178 @@
+---
+title: "HPLC QC"
+output: html_notebook
+---
+```{r}
+#Upload packages
+library(tidyverse)
+library(here)
+library(patchwork)
+library(readxl)
+```
+
+```{r}
+#Uploading Chlorophyll -  the date is the upload date from the portal
+chl <- read_csv(here("files", "chl_2022_investigation.csv"))
+
+#Upload HPLC data
+hplc <- read_csv(here("files", "hplc_2022_investigation.csv"))
+
+#Upload HPLC data
+ctd <- read_csv(here("files", "ctd_2022_investigation.csv"))
+```
+
+
+```{r}
+#Looking at different programs
+project <- chl %>% 
+  distinct(project, survey)
+
+#Filtering out zoopsprint sampling
+chl <- chl %>% 
+  filter(!is.na(project))
+
+#Filtering so only shallower than 20m data - this is where HPLC is collected.
+chl <- chl %>% 
+  filter(line_out_depth < 21)
+
+#Separting out the size-fractionated data
+chl_sf <- chl %>% 
+  filter(!filter_type == "Bulk GF/F")
+
+#Pivoting size-fractionated data wider
+chl_sf_wide <- chl_sf %>% 
+  # filter(!is.na(chla)) %>% 
+  select(date, collected, line_out_depth, filter_type, chla) %>% 
+  pivot_wider(names_from = "filter_type", values_from = "chla") %>% 
+  mutate(sf_sum = `20um` + `3um` + `GF/F`)
+
+#Separting out the bulk data
+chl_bulk <- chl %>% 
+  filter(filter_type == "Bulk GF/F") %>% 
+  select(date, collected, line_out_depth, chla)
+
+#Prepping the HPLC data for a join
+hplc_chla <- hplc %>% 
+  select(date, collected, line_out_depth, all_chl_a)
+
+#Joining the bulk data with the size-fractionated data and hplc data
+chl_join <- chl_bulk %>% 
+  left_join(chl_sf_wide) %>% 
+  left_join(hplc_chla)
+
+#Bring in the fluorometer data?
+```
+```{r}
+#Working with ctd data so I can join it with the bottle samples 
+
+#Looking at different cruises
+ctd_cruise <- ctd %>% 
+  distinct(Cruise)
+
+#Selecting the oceanography cruises and the useful columns for joining. Renaming some of the columns so that they will join with the bottle chlorophyll data
+ctd_clean <- ctd %>% 
+  filter(Cruise == "QOMA1" | Cruise == "QOMA5" | Cruise == "QOMA1,QOMA5") %>%
+  select(date_time = `Measurement time`, line_out_depth = `Pressure (dbar)`,
+         flu =`Fluorometry Chlorophyll (ug/L)`)
+
+#Making a date column from measurement time and selecting joining depths
+ctd_clean2 <- ctd_clean %>% 
+  mutate(date = lubridate::date(date_time)) %>% 
+  relocate(date, .before = date_time) %>%
+  filter(line_out_depth == 1 | line_out_depth == 5 | line_out_depth == 10 |
+           line_out_depth == 20)
+
+#Checking for duplicate CTD casts - there are two. One on 2022-08-30 and the other on 2022-10-11
+ctd_dup <- ctd_clean2 %>% 
+  group_by(date) %>% 
+  summarise(n = n()) %>% 
+  ungroup() %>% 
+  filter(n > 4)
+```
+
+```{r}
+#Looking into duplicate CTD casts 
+ctd_dup_cast <- ctd_clean2 %>% 
+  filter(date == "2022-08-30" | date == "2022-10-11")
+
+#2022-08-30 About an 1:40 minuts apart. Values are pretty comparable with exception to surface which may be due to quenching
+
+#2022-10-11 seems to be back to back casts. 
+
+#Going to just do a daily average for these for the time being.
+
+ctd_clean3 <- ctd_clean2 %>% 
+  group_by(date, line_out_depth) %>% 
+  summarise(flu_dm = mean(flu)) %>% 
+  ungroup()
+  
+```
+```{r}
+#Trying to join with the bottle chlorophyll data
+chl_join <- chl_join %>% 
+  left_join(ctd_clean3)
+```
+
+Let's figure out data jump
+
+
+```{r}
+chl_join %>%
+  filter(line_out_depth < 50) %>% 
+  ggplot(aes(x = date)) +
+  geom_area(aes(y = flu_dm), fill = "darkgreen", color = "black", size = 0.3,
+            alpha = 0.5) +
+  geom_point(aes(y = chla), pch = 21, color = "black", fill = "blue", size = 2.5) +
+  geom_point(aes(y = all_chl_a), pch = 22, color = "black", fill = "red", size = 2.5) +
+  geom_point(aes(y = sf_sum), pch = 23, color = "black", fill = "purple", size = 2.5) +
+  facet_grid(line_out_depth ~ .) +
+  labs(y = "Chla (ug/L)") +
+  theme_bw() +
+  theme(text = element_text(size = 25),
+        axis.title.x = element_blank(),
+        # axis.text.y = element_blank(),
+        axis.text = element_text(colour = "black"))
+
+ggsave(here("figures_qc", "multi-2020-timeseries.png"),
+       width = 16, height = 10, dpi = 300)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

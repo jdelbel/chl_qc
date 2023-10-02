@@ -26,6 +26,9 @@ cali <- read_xlsx(here("files",
                              "cali_summary_2022-07_29_new_modules.xlsx"), 
                   sheet = "summary")
 
+ss_run <- read_csv(here("files",
+                             "ss_1154_2022_2023_2.csv"))
+
 ```
 
 ```{r}
@@ -33,6 +36,32 @@ cali <- read_xlsx(here("files",
 cali <- cali %>% 
   mutate_at(vars(r2), funs(round(., 4)))
 ```
+
+```{r}
+ss <- cali %>% 
+  select(Date, Fluorometer, ss_low, ss_high) %>% 
+  # filter(Fluorometer == "720000982") %>% 
+  group_by(Fluorometer) %>% 
+  mutate(pdl = ((lag(ss_low) - ss_low)/ss_low) * 100,
+         pdh = ((lag(ss_high) - ss_high)/ss_high) * 100) %>% 
+  ungroup() %>%
+  select(Date, Fluorometer, pdl, pdh) %>% 
+  pivot_longer(c(pdl, pdh), values_to = "pd", names_to = "ss") %>% 
+  mutate(pd = case_when(Date == as.Date("2022-06-14") ~ 0,
+                        TRUE ~ as.numeric(pd)))
+```
+
+```{r}
+ss_run_long <- ss_run %>% 
+  mutate(date = lubridate::mdy(Date),
+         date = lubridate::date(date)) %>% 
+  rename(pdl = `% Change_back`, 
+         pdh = `% Change_front`) %>% 
+  select(date, pdl, pdh) %>% 
+  pivot_longer(c(pdl, pdh), values_to = "pd", names_to = "ss")   
+```
+
+
 
 ```{r}
 p1 <- cali %>% 
@@ -77,73 +106,145 @@ p2 <- cali %>%
         text = element_text(size = 30),
         axis.text = element_text(colour = "black")) 
 
-p3 <- cali %>% 
-  filter(Fluorometer == 720000982) %>%
-  ggplot(aes(factor(Date), fm, fill = Lab)) +
-  geom_bar(stat = "identity", color = "Black", size = 1,
-           width = 0.6) + 
+p3 <- cali_point %>% 
+  filter(fluorometer == 720000982) %>%
+  ggplot(aes(factor(date), fm, fill = as.factor(date))) +
+  geom_boxplot() +
+  geom_point() +
   theme_bw() +
   coord_cartesian(ylim = c(1.65, 1.90)) +
   labs(y = "Acid Ratio (fm)",
        x = "Cali. Date") +
-  scale_fill_brewer(palette = "Set1") +
+  scale_fill_brewer(palette = "Dark2") +
   theme(legend.position = "none",
+        text = element_text(size = 30),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        # axis.text.x = element_text(angle = 45, hjust = 1),
+        # axis.title.y = element_blank(),
+        # axis.text.y = element_blank(),
+        axis.text = element_text(colour = "black"))
+
+p4 <- cali_point %>% 
+  filter(fluorometer == 720001154) %>%
+  ggplot(aes(factor(date), fm, fill = as.factor(date))) +
+  geom_boxplot() +
+  geom_point() +
+  theme_bw() +
+  coord_cartesian(ylim = c(1.65, 1.90)) +
+  labs(y = "Acid Ratio (fm)",
+       x = "Cali. Date") +
+  scale_fill_brewer(palette = "Dark2") +
+  theme(legend.position = "none",
+        text = element_text(size = 30),
+        # axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text = element_text(colour = "black"))
+
+
+p5 <- ss %>% 
+  filter(Fluorometer == 720000982) %>%
+  ggplot(aes(factor(Date), pd, fill = ss)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  geom_hline(yintercept = 5, color = "red") +
+  geom_hline(yintercept = -5, color = "red") +
+  geom_hline(yintercept = 0, color = "black") +
+  theme_bw() +
+  coord_cartesian(ylim = c(-8, 8)) +
+  labs(y = "% Diff. Solid Std.",
+       x = "Cali. Date") +
+  scale_fill_manual(values = c("#3d5a80", "#98c1d9"),
+                    labels = c("High", "Low"),) +
+  labs(fill = "Solid Standard") +
+  theme(legend.position = c(0.22, 0.87),
         text = element_text(size = 30),
         axis.text.x = element_text(angle = 45, hjust = 1),
         # axis.title.y = element_blank(),
         # axis.text.y = element_blank(),
-        axis.text = element_text(colour = "black")) 
+        axis.text = element_text(colour = "black"))
 
-p4 <- cali %>% 
+p6 <- ss %>%  
   filter(Fluorometer == 720001154) %>%
-  ggplot(aes(factor(Date), fm, fill = Lab)) +
-  geom_bar(stat = "identity", color = "Black", size = 1,
-           width = 0.6) + 
+  ggplot(aes(factor(Date), pd, fill = ss)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  geom_hline(yintercept = 5, color = "red") +
+  geom_hline(yintercept = -5, color = "red") +
+  geom_hline(yintercept = 0, color = "black") +
   theme_bw() +
-  coord_cartesian(ylim = c(1.65, 1.90)) +
-  labs(y = "Acid Ratio (fm)",
+  coord_cartesian(ylim = c(-8, 8)) +
+  labs(y = "% Diff. S.Std.",
        x = "Cali. Date") +
-  # scale_fill_manual(breaks = c("Hakai-Quadra", "DFO"),
-  #                   values = c("#4DAF4A", "#E41A1C")) +
-  scale_fill_brewer(palette = "Set1") +
+  scale_fill_manual(values = c("#3d5a80", "#98c1d9"),
+                    labels = c("High", "Low"),) +
   theme(legend.position = "none",
         text = element_text(size = 30),
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
         axis.text = element_text(colour = "black"))
-  
-fig <- p1 + p2 + p3 + p4 + 
-  plot_annotation(tag_levels = "A") & 
-  theme(plot.tag = element_text(size = 30))
 
-ggsave(here("figures", "calibration_summary_new_modules.png"), 
-       fig, width = 16, height = 15, dpi = 300)
+
+  
+fig <- (p1 + p2) / (p3 + p4) / (p5 + p6)
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 34))
+
+ggsave(here("figures", "calibration_summary_new_modules_2023.png"), 
+       fig, width = 16, height = 20, dpi = 300)
 ```
+
+
 
 ```{r}
 cali_point %>% 
   ggplot(aes(x = chl, y = rb/100000, fill = as.factor(date))) +
   geom_point(pch = 21, size = 3, stroke = 1.5) +
-  geom_smooth(aes(color = as.factor(date)), method = "lm") +
+  geom_smooth(aes(color = as.factor(date)), method = "lm", se = F) +
   facet_grid(. ~ as.factor(fluorometer)) +
-  scale_fill_brewer(palette = "Set1") +
+  scale_fill_brewer(palette = "Dark2") +
   labs(x = "Chla (ug/L)",
-       y = "Instrument Raw/100k (RFU)",
+       y = "RFU * 100k (RFU)",
        fill = "Cali. Date",
        color = "Cali. Date") +
   theme_bw() +
-  theme(legend.position = c(0.1, 0.9),
+  theme(legend.position = c(0.1, 0.87),
         legend.background = element_blank(),
         text = element_text(size = 25),
         axis.line = element_line(colour = "black"),
         axis.text = element_text(colour = "black"))
 
-ggsave(here("figures", "calibration_curve_new_modules.png"), 
+ggsave(here("figures", "calibration_curve_new_modules_2023.png"), 
        width = 10.5, height = 6, dpi = 300)  
 ```
 
+```{r}
+ss_run_long %>% 
+  mutate(month =lubridate::month(date)) %>% 
+  ggplot(aes(x = as.factor(date), y = pd*100, fill = ss)) +
+  geom_hline(yintercept = 5, color = "red") +
+  geom_hline(yintercept = -5, color = "red") +
+  geom_hline(yintercept = 0, color = "black") +
+  geom_boxplot() +
+  geom_point(size = 2, pch = 21,
+             position = position_jitterdodge(jitter.width = 0.2)) +
+  # coord_cartesian(ylim = c(-8, 8)) +
+  labs(y = "% Diff. S.Std.",
+       x = "Run Date") +
+  scale_fill_manual(values = c("#3d5a80", "#98c1d9"),
+                    labels = c("High", "Low")) +
+  labs(fill = "Solid Standard") +
+  theme_bw() +
+  theme(legend.position = c(0.1, 0.8),
+        text = element_text(size = 30),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        axis.text = element_text(colour = "black"))
 
+ggsave(here("figures", "calibration_2023_ss_track.png"), 
+       width = 16, height = 8, dpi = 300)
+```
 
 
 
