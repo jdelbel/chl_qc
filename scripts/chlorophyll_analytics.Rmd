@@ -50,6 +50,7 @@ c_qc <- c_qc %>%
 
 #Calculating daily mean where there are replicates - OK for now, but should try to cut out non-ocean samples if just doing 
 c_dm <- c_qc %>% 
+  filter(chla > 0) %>% 
   group_by(date, site_id, line_out_depth, filter_type) %>% 
   summarise(chla_dm = mean(chla),
             chla_sdev = sd(chla),
@@ -60,6 +61,31 @@ c_dm <- c_qc %>%
 #Separating Bulk data
 c_bulk <- c_dm %>% 
   filter(filter_type == "Bulk GF/F")
+
+#Separting size-fractionated data and calculating size-fractionated sum
+c_sf <- c_dm %>% 
+  filter(!filter_type == "Bulk GF/F") %>% 
+  group_by(date, site_id, line_out_depth) %>% 
+  mutate(n_filt = n()) %>% 
+  ungroup() %>% 
+  group_by(date, site_id, line_out_depth, filter_type) %>%
+  mutate(n_type = n()) %>% 
+  ungroup() %>% 
+  filter(n_filt == 3 & n_type == 1) %>% 
+  group_by(date, site_id, line_out_depth) %>% 
+  mutate(sf_sum = sum(chla_dm)) %>% 
+  ungroup() %>% 
+  mutate(sf_perc = chla_dm/sf_sum) %>% 
+  group_by(date, site_id, line_out_depth) %>% 
+  mutate(perc_check = sum(sf_perc)) %>% 
+  ungroup()
+
+c_sf_perc_wide <- c_sf %>%
+  filter(!filter_type == "2um") %>% 
+  select(date, site_id, line_out_depth, filter_type, sf_perc) %>% 
+  pivot_wider(names_from = filter_type, values_from = sf_perc) %>% 
+  drop_na()
+  
 ```
 
 ```{r}
@@ -170,13 +196,11 @@ totals_2023_calvert <- c_23_all %>%
   ungroup()
 
 
-chl_2023_group_stn %>% 
-  filter(group == "Calvert OCGY" ) %>% 
+chl_2023_calvert %>% 
   ggplot(aes(x = reorder(site_id, n_filt), y = n_filt, fill = filter_type)) +
   geom_bar(stat = "identity", color = "black") +
   geom_text(aes(x = site_id, y = n_tot, label = n_tot, fill = NULL),
               data = totals_2023_calvert, vjust = -0.5, size = 8) +
-  facet_wrap(~group, scales = "free") +
   ylim(0, 300) +
   ggsci::scale_fill_npg(name = "Filter Size") +
   ylab("# of samples") +
@@ -189,7 +213,7 @@ chl_2023_group_stn %>%
         text = element_text(size = 25, 
                             color = "black"))
 
-ggsave(here("figs_invent", "sample_numbers_calvert_2023.png"), 
+ggsave(here("figs_invent", "sample_numbers_calvert_2023_2.png"), 
        width = 8, height = 6, dpi = 300)
 ```
 
@@ -216,257 +240,47 @@ c_max_n <- c_max %>%
 ```
 
 ```{r}
-#Plotting chl max depth distribution for QU39 and KC10
-
-#Number of max per depth
-f1 <- c_max_n %>% 
-  ggplot(aes(x = site_id, y = n_max, fill = as.factor(line_out_depth))) +
-  geom_bar(stat = "identity", position = "dodge", color = "black") +
-  geom_text(aes(label = n_max), position = position_dodge(width = 0.9),
-            vjust = -0.25, size = 10) +
-  ggsci::scale_fill_npg(name = "Depth") +
-  ylim(0, 180) +
-  ylab("# Max Chl") +
-  ggtitle("Chlorophyll Bottle Samples") +
-  theme_bw() +
-  theme(legend.position = c(0.06, 0.75),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.text = element_text(color = "black"),
-        text = element_text(size = 35, 
-                            color = "black"))
-#Percentage of max by depth
-f2 <- c_max_n %>% 
-  ggplot(aes(x = site_id, y = max_perc, fill = as.factor(line_out_depth))) +
-  geom_bar(stat = "identity", position = "dodge", color = "black") +
-  geom_text(aes(label = max_perc), position = position_dodge(width = 0.9),
-            vjust = 0.5, hjust = -0.2, angle = 90, size = 10) +
-  ggsci::scale_fill_npg() +
-  ylim(0, 100) +
-  ylab("% Max Chl") +
-  theme_bw() +
-  theme(legend.position = "none",
-        axis.title.x = element_blank(),
-        axis.text = element_text(color = "black"),
-        text = element_text(size = 35, color = "black"))
-
-fig <- f1/f2
-
-ggsave(here("figs_invent", "chl_max_dep_test.png"), fig,
-       width = 16, height = 12, dpi = 300)
-```
-
-
-```{r}
-#Want to look at how similar 0 and 5m depth are biomass wise.
-
-c_bulk_wide <- c_bulk %>%
-  select(date:line_out_depth, chla_dm) %>% 
-  pivot_wider(names_from = line_out_depth, values_from = chla_dm) 
-
-c_bulk_wide <- c_bulk_wide %>% 
-  rename(m0 = `0`, m5 = `5`, m10 = `10`, m20 = `20`, m30 = `30`)
-
-c_bulk_high <- c_bulk %>%
-  filter(chla_dm > 100)
-
-c_bulk_wide <- c_bulk_wide %>% 
-  filter(m0 < 100 & m5 < 100)
-
-ggscatter(c_bulk_wide, x = "m0", y = "m5", fill = "site_id", palette = "npg",
-          add = "reg.line", size = 4, shape = 21) +
-  geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~ site_id) +
-  xlim(0, 20) +
-  ylim(0, 20) +
-  stat_cor(label.y = 19.5, size = 10) +
-  stat_regline_equation(label.y = 17, size = 10) +
-  xlab("chl (0m, ug/L)") +
-  ylab("chl (5m, ug/L)") +
-  theme_bw() + 
-  theme(legend.position = "none",
-        text = element_text(size = 30))
-
-ggsave(here("figs_invent", "chl_bulk_0_5_scatter.png"), 
-       width = 16, height = 6, dpi = 300)
-
-```
-```{r}
-#Trying to look at comparability of bulk and SF
-c_bulk_join <- c_bulk %>% 
-  select(date, site_id, line_out_depth, bulk_dm = chla_dm)
-
-c_dm_join <- c_dm %>% 
-  select(date, site_id, line_out_depth, sum) %>% 
-  distinct(date, site_id, line_out_depth, sum)
-
-c_bulk_sf <- c_bulk_join %>% 
-  left_join(c_dm_join)
-
-c_bulk_sf <- c_bulk_sf %>% 
-  filter(bulk_dm < 100 & sum < 100)
-
-ggscatter(c_bulk_sf, x = "bulk_dm", y = "sum", fill = "site_id", palette = "npg",
-          add = "reg.line", size = 4, shape = 21) +
-  geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~ site_id) +
-  xlim(0, 30) +
-  ylim(0, 30) +
-  stat_cor(label.y = 29.5, size = 10) +
-  stat_regline_equation(label.y = 27, size = 10) +
-  xlab("chl (bulk, ug/L)") +
-  ylab("chl (SF-Sum, ug/L)") +
-  theme_bw() + 
-  theme(legend.position = "none",
-        text = element_text(size = 30))
-
-ggsave(here("figs_invent", "chl_bulk_sfsum.png"), 
-       width = 16, height = 6, dpi = 300)
-
-```
-
-
-```{r}
-c_dm %>% 
-  filter(site_id == "QU39") %>% 
-  ggplot(aes(x = date, y = log10(chla_dm), color = as.factor(line_out_depth))) +
-  geom_point(size = 2) +
-  geom_line(size = 2) +
-  labs(y = "log10(Chl (ug/L))") +
-  ggtitle("QU39") +
-  ggsci::scale_color_npg(name = "Depth") +
-  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
-  theme_bw() +
-  theme(
-        axis.title.x = element_blank(),
-        text = element_text(size = 30))
-  
-ggsave(here("figs_invent", "TS_QU39_filt-type_CONC.png"),
-       width = 16, height = 14, dpi = 300)
-```
-```{r}
-c_dm %>% 
-  filter(site_id == "QU39") %>% 
-  ggplot(aes(x = date, y = perc, color = as.factor(line_out_depth))) +
-  geom_point(size = 2) +
-  geom_line(size = 2) +
-  labs(y = "% of total") +
-  ggtitle("QU39") +
-  ggsci::scale_color_npg(name = "Depth") +
-  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
-  theme_bw() +
-  theme(
-        axis.title.x = element_blank(),
-        text = element_text(size = 30))
-  
-ggsave(here("figs_invent", "TS_QU39-filt-type_PERC.png"),
-       width = 16, height = 14, dpi = 300)
-```
-
-```{r}
-c_dm %>% 
-  filter(site_id == "DFO2") %>% 
-  ggplot(aes(x = date, y = log10(chla_dm), color = as.factor(line_out_depth))) +
-  geom_point(size = 2) +
-  geom_line(size = 2) +
-  labs(y = "log10(Chl (ug/L))") +
-  ggtitle("DFO2") +
-  ggsci::scale_color_npg(name = "Depth") +
-  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
-  theme_bw() +
-  theme(
-        axis.title.x = element_blank(),
-        text = element_text(size = 30))
-  
-ggsave(here("figs_invent", "TS_DFO2_filt_type_CONC.png"),
-       width = 16, height = 14, dpi = 300)
-```
-
-```{r}
-
-c_dm %>% 
-  filter(site_id == "DFO2") %>% 
-  ggplot(aes(x = date, y = perc, color = as.factor(line_out_depth))) +
-  geom_point(size = 2) +
-  geom_line(size = 2) +
-  labs(y = "% of total") +
-  ggtitle("DFO2") +
-  ggsci::scale_color_npg(name = "Depth") +
-  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
-  theme_bw() +
-  theme(
-        axis.title.x = element_blank(),
-        text = element_text(size = 30))
-  
-ggsave(here("figs_invent", "TS_DFO2_filt-type_PERC.png"),
-       width = 16, height = 14, dpi = 300)
-```
-
-```{r}
-c_dm %>% 
-  filter(site_id == "KC10" & date > "2017-01-01") %>% 
-  ggplot(aes(x = date, y = log10(chla_dm), color = as.factor(line_out_depth))) +
-  geom_point(size = 2) +
-  geom_line(size = 2) +
-  labs(y = "log10(Chl (ug/L))") +
-  ggtitle("KC10") +
-  ggsci::scale_color_npg(name = "Depth") +
-  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
-  theme_bw() +
-  theme(
-        axis.title.x = element_blank(),
-        text = element_text(size = 30))
-  
-ggsave(here("figs_invent", "TS_KC10-filt-type_CONC.png"),
-       width = 16, height = 14, dpi = 300)
-```
-```{r}
-c_dm %>% 
-  filter(site_id == "KC10" & date > "2017-01-01") %>% 
-  ggplot(aes(x = date, y = perc, color = as.factor(line_out_depth))) +
-  geom_point(size = 2) +
-  geom_line(size = 2) +
-  labs(y = "% of total") +
-  ggtitle("KC10") +
-  ggsci::scale_color_npg(name = "Depth") +
-  facet_wrap(~ filter_type, ncol = 1, scales = "free_y") +
-  theme_bw() +
-  theme(
-        axis.title.x = element_blank(),
-        text = element_text(size = 30))
-  
-ggsave(here("figs_invent", "TS_KC10-filt-type_PERC.png"),
-       width = 16, height = 14, dpi = 300)
-```
-
-```{r}
-cq_20 <- cl_p %>% 
-  filter(site_id == "QU39" & filter_type == "20um") %>% 
-  select(`0m` = m0, `5m` = m5, `10m` = m10, `20m` = m20, `30m` =  m30) %>% 
+cq_20 <- c_sf %>% 
+  filter(site_id == "QU39" & filter_type == "20um" & line_out_depth < 31) %>% 
+  select(date, line_out_depth, sf_perc) %>%
+  pivot_wider(names_from = line_out_depth, values_from = sf_perc) %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`, `30m` = `30`) %>% 
   drop_na()
 
 corr_q_20 <- round(cor(cq_20), 1)
 
 p.mat_q_20 <- cor_pmat(cq_20)
+
 head(p.mat_q_20[, 1:5])
 
-f1 <- ggcorrplot(corr_q_20, outline.color = "white", lab = TRUE, type = "lower", 
-           p.mat = p.mat_q_20, lab_size = 10) +
-  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
-                      high =  "red") +
-  ggtitle(">20.0um") +
+f1 <- ggcorrplot(corr_q_20,
+           outline.color = "white",
+           lab = TRUE,
+           insig = "blank",
+           type = "lower", 
+           p.mat = p.mat_q_20,
+           lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0, 1), low = "white", 
+                      high =  "Red") +
+  ggtitle("% Micro") +
   annotate("text", x = 1, y = 4.3, label = "QU39", size = 10) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         axis.title.y = element_blank(),
-        legend.position = c(0.15, 0.67),
-        text = element_text(size = 30))
+        axis.text = element_text(color = "black"),
+        legend.position = c(0.15, 0.68),
+        text = element_text(size = 35))
+```
 
-cq_3 <- cl_p %>% 
-  filter(site_id == "QU39" & filter_type == "3um") %>% 
-  select(`0m` = m0, `5m` = m5, `10m` = m10, `20m` = m20, `30m` =  m30) %>% 
+
+```{r}
+cq_3 <- c_sf %>% 
+  filter(site_id == "QU39" & filter_type == "3um" & line_out_depth < 31) %>% 
+  select(date, line_out_depth, sf_perc) %>%
+  pivot_wider(names_from = line_out_depth, values_from = sf_perc) %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`, `30m` = `30`) %>% 
   drop_na()
 
 corr_q_3 <- round(cor(cq_3), 1)
@@ -474,23 +288,34 @@ corr_q_3 <- round(cor(cq_3), 1)
 p.mat_q_3 <- cor_pmat(cq_3)
 head(p.mat_q_3[, 1:5])
 
-f2 <- ggcorrplot(corr_q_3, outline.color = "white", lab = TRUE, type = "lower", 
-           p.mat = p.mat_q_3, lab_size = 10) +
-  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
-                      high =  "red") +
-  ggtitle("3.0-20.0um") +
+f2 <- ggcorrplot(corr_q_3, 
+           outline.color = "white",
+           lab = TRUE,
+           insig = "blank",
+           type = "lower", 
+           p.mat = p.mat_q_3,
+           lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0, 1), low = "white", 
+                      high =  "Red") +
+  ggtitle("% Nano") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
+        axis.text = element_text(color = "black"),
         legend.position = "none",
-        text = element_text(size = 30))
+        text = element_text(size = 35))
+```
 
-cq_g <- cl_p %>% 
-  filter(site_id == "QU39" & filter_type == "GF/F") %>% 
-  select(`0m` = m0, `5m` = m5, `10m` = m10, `20m` = m20, `30m` =  m30) %>% 
+
+```{r}
+f3 <- cq_g <- c_sf %>% 
+  filter(site_id == "QU39" & filter_type == "GF/F" & line_out_depth < 31) %>% 
+  select(date, line_out_depth, sf_perc) %>%
+  pivot_wider(names_from = line_out_depth, values_from = sf_perc) %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`, `30m` = `30`) %>% 
   drop_na()
 
 corr_q_g <- round(cor(cq_g), 1)
@@ -498,23 +323,34 @@ corr_q_g <- round(cor(cq_g), 1)
 p.mat_q_g <- cor_pmat(cq_g)
 head(p.mat_q_g[, 1:5])
 
-f3 <- ggcorrplot(corr_q_g, outline.color = "white", lab = TRUE, type = "lower", 
-           p.mat = p.mat_q_g, lab_size = 10) +
-  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
-                      high =  "red") +
-  ggtitle("0.7-3.0um") +
+f3 <- ggcorrplot(corr_q_g,
+           outline.color = "white",
+           lab = TRUE,
+           insig = "blank",
+           type = "lower", 
+           p.mat = p.mat_q_g,
+           lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0, 1), low = "white", 
+                      high =  "Red") +
+  ggtitle("% Pico") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
+        axis.text = element_text(color = "black"),
         legend.position = "none",
-        text = element_text(size = 30))
+        text = element_text(size = 35))
+```
 
-ck_20 <- cl_p %>% 
-  filter(site_id == "KC10" & filter_type == "20um") %>% 
-  select(`0m` = m0, `5m` = m5, `10m` = m10, `20m` = m20, `30m` =  m30) %>% 
+
+```{r}
+ck_20 <- c_sf %>% 
+  filter(site_id == "KC10" & filter_type == "20um" & line_out_depth < 31) %>% 
+  select(date, line_out_depth, sf_perc) %>%
+  pivot_wider(names_from = line_out_depth, values_from = sf_perc) %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`, `30m` = `30`) %>% 
   drop_na()
 
 corr_k_20 <- round(cor(ck_20), 1)
@@ -522,21 +358,32 @@ corr_k_20 <- round(cor(ck_20), 1)
 p.mat_k_20 <- cor_pmat(ck_20)
 head(p.mat_k_20[, 1:5])
 
-f4 <- ggcorrplot(corr_k_20, outline.color = "white", lab = TRUE, type = "lower", 
-           p.mat = p.mat_k_20, lab_size = 10) +
-  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
-                      high =  "red") +
+f4 <- ggcorrplot(corr_k_20,
+                 outline.color = "white",
+           lab = TRUE,
+           insig = "blank",
+           type = "lower", 
+           p.mat = p.mat_k_20,
+           lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0, 1), low = "white", 
+                      high =  "Red") +
   annotate("text", x = 1, y = 4.3, label = "KC10", size = 10) +
   theme_bw() +
   theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
         axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text = element_text(color = "black"),
         legend.position = "none",
-        text = element_text(size = 30))
+        text = element_text(size = 35))
+```
 
-ck_3 <- cl_p %>% 
-  filter(site_id == "KC10" & filter_type == "3um") %>% 
-  select(`0m` = m0, `5m` = m5, `10m` = m10, `20m` = m20, `30m` =  m30) %>% 
+
+```{r}
+ck_3 <- c_sf %>% 
+  filter(site_id == "KC10" & filter_type == "3um" & line_out_depth < 31) %>% 
+  select(date, line_out_depth, sf_perc) %>%
+  pivot_wider(names_from = line_out_depth, values_from = sf_perc) %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`, `30m` = `30`) %>% 
   drop_na()
 
 corr_k_3 <- round(cor(ck_3), 1)
@@ -545,21 +392,31 @@ p.mat_k_3 <- cor_pmat(ck_3)
 head(p.mat_k_3[, 1:5])
 
 #Need to set this one blank for no correlation
-f5 <- ggcorrplot(corr_k_3, outline.color = "white", lab = TRUE, type = "lower", 
-           p.mat = p.mat_k_3, insig = "blank", lab_size = 10) +
-  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
-                      high =  "red") +
+f5 <- ggcorrplot(corr_k_3,
+           outline.color = "white",
+           lab = TRUE,
+           insig = "blank",
+           type = "lower", 
+           p.mat = p.mat_k_3,
+           lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0, 1), low = "white", 
+                      high =  "Red") +
   theme_bw() +
   theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
+        axis.text = element_text(color = "black"),
         legend.position = "none",
-        text = element_text(size = 30))
+        text = element_text(size = 35))
+```
 
-ck_g <- cl_p %>% 
-  filter(site_id == "KC10" & filter_type == "GF/F") %>% 
-  select(`0m` = m0, `5m` = m5, `10m` = m10, `20m` = m20, `30m` =  m30) %>% 
+
+```{r}
+ck_g <- c_sf %>% 
+  filter(site_id == "KC10" & filter_type == "GF/F" & line_out_depth < 31) %>% 
+  select(date, line_out_depth, sf_perc) %>%
+  pivot_wider(names_from = line_out_depth, values_from = sf_perc) %>% 
+  select(`0m` = `0`, `5m` = `5`, `10m` = `10`, `20m` = `20`, `30m` = `30`) %>% 
   drop_na()
 
 corr_k_g <- round(cor(ck_g), 1)
@@ -567,109 +424,136 @@ corr_k_g <- round(cor(ck_g), 1)
 p.mat_k_g <- cor_pmat(ck_g)
 head(p.mat_k_g[, 1:5])
 
-f6 <- ggcorrplot(corr_k_g, outline.color = "white", lab = TRUE, type = "lower", 
-           p.mat = p.mat_k_g, lab_size = 10) +
-  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
-                      high =  "red") +
-  theme_bw() +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        legend.position = "none",
-        text = element_text(size = 30))
-
-cd_20 <- cl_p %>% 
-  filter(site_id == "DFO2" & filter_type == "20um") %>% 
-  select(`0m` = m0, `5m` = m5, `10m` = m10, `20m` = m20, `30m` =  m30) %>% 
-  drop_na()
-
-corr_d_20 <- round(cor(cd_20), 1)
-
-p.mat_d_20 <- cor_pmat(cd_20)
-head(p.mat_d_20[, 1:5])
-
-f7 <- ggcorrplot(corr_d_20, outline.color = "white", lab = TRUE, type = "lower", 
-           p.mat = p.mat_d_20, insig = "blank", lab_size = 10) +
-  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
-                      high =  "red") +
-  annotate("text", x = 1, y = 4.3, label = "DFO2", size = 10) +
-  theme_bw() +
-  theme(axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        legend.position = "none",
-        text = element_text(size = 30))
-
-cd_3 <- cl_p %>% 
-  filter(site_id == "DFO2" & filter_type == "3um") %>% 
-  select(`0m` = m0, `5m` = m5, `10m` = m10, `20m` = m20, `30m` =  m30) %>% 
-  drop_na()
-
-corr_d_3 <- round(cor(cd_3), 1)
-
-p.mat_d_3 <- cor_pmat(cd_3)
-head(p.mat_d_3[, 1:5])
-
-#Need to set this one blank for no correlation
-f8 <- ggcorrplot(corr_d_3, outline.color = "white", lab = TRUE, type = "lower", 
-           p.mat = p.mat_d_3, insig = "blank", lab_size = 10) +
-  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
-                      high =  "red") +
+f6 <- ggcorrplot(corr_k_g,
+                 outline.color = "white",
+           lab = TRUE,
+           insig = "blank",
+           type = "lower",
+           p.mat = p.mat_k_g,
+           lab_size = 10) +
+  scale_fill_gradient(name = "R", limit = c(0, 1), low = "white", 
+                      high =  "Red") +
   theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
+        axis.text = element_text(color = "black"),
         legend.position = "none",
-        text = element_text(size = 30))
+        text = element_text(size = 35))
 
-cd_g <- cl_p %>% 
-  filter(site_id == "DFO2" & filter_type == "GF/F") %>% 
-  select(`0m` = m0, `5m` = m5, `10m` = m10, `20m` = m20, `30m` =  m30) %>% 
-  drop_na()
-
-corr_d_g <- round(cor(cd_g), 1)
-
-p.mat_d_g <- cor_pmat(cd_g)
-head(p.mat_d_g[, 1:5])
-
-f9 <- ggcorrplot(corr_d_g, outline.color = "white", lab = TRUE, type = "lower", 
-           p.mat = p.mat_d_g, lab_size = 10) +
-  scale_fill_gradient(name = "R", limit = c(0.3, 1), low = "white", 
-                      high =  "red") +
-  theme_bw() +
-  theme(axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        legend.position = "none",
-        text = element_text(size = 30))
-
-fig <- (f1 + f2 + f3) / (f4 + f5 + f6) / (f7 + f8 + f9)
-
-ggsave(here("figs_invent", "correlation_test.png"),
-       width = 16, height = 16, dpi = 300)
 ```
 
 ```{r}
+fig <- (f1 + f2 + f3) / (f4 + f5 + f6)
+
+ggsave(here("figs_invent", "correlation_percentage test.png"),
+       width = 16, height = 12, dpi = 300)
+```
+```{r}
+
+
+c_sf <- c_sf %>% 
+  mutate(month = lubridate::month(date))
+
+c_sf <- c_sf %>%
+  mutate(season = case_when(month == 12 | month == 1 | month == 2 ~ "Winter",
+                            month >= 3 & month <= 5 ~ "Spring",
+                            month >= 6 & month <= 8 ~ "Summer",
+                            month >= 9 & month <= 11 ~ "Autumn",)) %>%
+  relocate(season, .after = month)    
+  
+#Order locations from fjord to shelf
+order_loc_seas <- c("Winter", "Spring", "Summer", "Autumn")
+
+
+
+#Chemtax - Specify order of phyto groups for figures
+c_sf <- arrange(mutate(c_sf,
+                         season = factor(season, levels = order_loc_seas)))
+
+
+```
+
+
+
+```{r}
+c_sf %>% 
+  filter(!filter_type == "2um" & line_out_depth < 31) %>%
+  group_by(site_id, line_out_depth, season, filter_type) %>% 
+  summarise(mean_perc = median(chla_dm)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = mean_perc, y = fct_rev(as_factor(line_out_depth)), fill = filter_type)) +
+  geom_bar(stat = "identity", position = "stack", color = "black") +
+  facet_grid(site_id~season, scales = "free_x") +
+  ggsci::scale_fill_npg(name = "Filter Size") +
+  labs(x = "Chla (ug/L)",
+       y = "Depth (m)") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        text = element_text(size = 35),
+        axis.text = element_text(colour = "black"),
+        legend.position = c(0.18, 0.6))
+
+ggsave(here("figs_invent", "Depth_mean_sf_median.png"), 
+       width = 20, height = 12, dpi = 300)
+```
+
+```{r}
+c_sf %>% 
+  filter(!filter_type == "2um" & line_out_depth < 31) %>%
+  group_by(site_id, line_out_depth, season, filter_type) %>% 
+  summarise(mean_perc = median(chla_dm)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = mean_perc, y = fct_rev(as_factor(line_out_depth)), fill = filter_type)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  facet_grid(site_id~season, scales = "free_x") +
+  ggsci::scale_fill_npg(name = "Filter Size") +
+  labs(x = "% Chla (ug/L)",
+       y = "Depth (m)") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        text = element_text(size = 35),
+        axis.text = element_text(colour = "black"),
+        legend.position = "none")
+
+ggsave(here("figs_invent", "Depth_mean_sf_median_perc.png"), 
+       width = 20, height = 12, dpi = 300)
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
 #Working on nmds
-# c_nmds <- c_dm %>%
-#   select(date:chla_dm) %>% 
-#   pivot_wider(names_from = filter_type, values_from = chla_dm)
+c_nmds <- c_sf_perc_wide 
 # 
 # #Arranging according to site ID and date
-# c_nmds <- c_nmds %>% 
-#   mutate(month = lubridate::month(date)) %>% 
-#   arrange(site_id, date) %>% 
-#   relocate(month, .after = date)
+c_nmds <- c_nmds %>%
+  mutate(month = lubridate::month(date)) %>%
+  arrange(site_id, date) %>%
+  relocate(month, .after = date)
 # 
-# nq <- c_nmds %>% 
-#   filter(site_id == "QU39")
+nq <- c_nmds %>%
+  filter(site_id == "QU39")
 # 
-# nk <- c_nmds %>% 
-#   filter(site_id == "KC10" & `3um` > 0)  
+nk <- c_nmds %>%
+  filter(site_id == "KC10" & `3um` > 0)
 # 
-# nq_conc <- nq[, 5:ncol(nq)]
-# 
-# nk_conc <- nk[, 5:ncol(nk)]
+nq_perc <- nq[, 5:ncol(nq)]
+
+nk_perc <- nk[, 5:ncol(nk)]
 # 
 # nq_rel <- decostand(nq_conc, method = "total")
 # 
@@ -682,8 +566,8 @@ ggsave(here("figs_invent", "correlation_test.png"),
 ```
 
 ```{r}
-# nq_nmds <-  metaMDS(nq_conc_t, distance = "bray", autotransform = FALSE,
-#                          k = 2, trymax = 100) 
+nk_nmds <-  metaMDS(nk_perc, distance = "bray", autotransform = FALSE,
+                         k = 2, trymax = 100)
 # 
 # 
 # 
@@ -700,9 +584,9 @@ ggsave(here("figs_invent", "correlation_test.png"),
 # stressplot(nq_nmds)
 ```
 ```{r}
-# data.scores = as.data.frame(scores(nq_nmds))
-# data.scores$month = nq$month
-# data.scores$depth = nq$line_out_depth
+data.scores = as.data.frame(scores(nk_nmds))
+data.scores$month = nk$month
+data.scores$depth = nk$line_out_depth
 # 
 # data.scores_rel = as.data.frame(scores(nq_nmds_rel))
 # data.scores_rel$month = nq$month
@@ -716,30 +600,30 @@ ggsave(here("figs_invent", "correlation_test.png"),
 ```{r}
 #Plotting nMDS - commented sections are for if I want to add environmental fits.
 
-# ggplot(data = data.scores_rel, aes(x = NMDS1, y = NMDS2)) + 
-#   geom_point(data = data.scores_rel, aes(fill = as.factor(depth)),
-#              size = 4, pch = 21) + 
-#   scale_fill_brewer(palette = "RdYlBu") +
-#   # scale_fill_manual(values = c("blue", "springgreen4", "black", "magenta")) + 
-#   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) + 
-#   # geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2), 
-#   #              data = en_coord_cont, size = 1, alpha = 0.5, colour = "grey30") +
-#   # geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
-#   #           fontface = "bold", label = row.names(en_coord_cont)) + 
-#   # xlim(-0.5, 1.8) +
-#   theme(axis.title = element_text(size = 10, face = "bold", colour = "black"),
-#         panel.background = element_blank(),
-#         panel.border = element_rect(fill = NA, colour = "black"), 
-#         axis.ticks = element_blank(),
-#         axis.text = element_blank(),
-#         legend.key = element_blank(), 
-#         legend.title = element_text(size = 10, face = "bold", colour = "black"), 
-#         legend.text = element_text(size = 9, colour = "black"),
-#         legend.position = c(0.92, 0.6),
-#         legend.margin = margin(-0.3,0,0,0, unit = "cm"),
-#         text = element_text(size = 30)) +
-#   labs(fill = "Month", shape = "Station") +
-#   guides(fill = guide_legend(override.aes = list(shape = 21)))
+ggplot(data = data.scores, aes(x = NMDS1, y = NMDS2)) +
+  geom_point(data = data.scores, aes(fill = as.factor(depth)),
+             size = 4, pch = 21) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  # scale_fill_manual(values = c("blue", "springgreen4", "black", "magenta")) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  # geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+  #              data = en_coord_cont, size = 1, alpha = 0.5, colour = "grey30") +
+  # geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
+  #           fontface = "bold", label = row.names(en_coord_cont)) +
+  # xlim(-0.5, 1.8) +
+  theme(axis.title = element_text(size = 10, face = "bold", colour = "black"),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, colour = "black"),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.key = element_blank(),
+        legend.title = element_text(size = 10, face = "bold", colour = "black"),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.position = c(0.92, 0.6),
+        legend.margin = margin(-0.3,0,0,0, unit = "cm"),
+        text = element_text(size = 30)) +
+  labs(fill = "Month", shape = "Station") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
 
 # ggsave(here("figures_new", "nmds_micro_absolute_photo.png"),
 #        width = 6, height = 4.5, dpi = 300)

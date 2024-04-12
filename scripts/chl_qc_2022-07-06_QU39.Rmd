@@ -304,6 +304,9 @@ chl_bulk %>%
 #Very odd trend as it would be expected that samples that weren't diluted would saturate the fluorometer and result in lower chla per HPLC TChla. Here the values are higher, although the trend line is <1, so higher values would go below 1:1 line and under-predict.
 
 #The new HPLC to chla with the diluted samples has 1:1 slope. Never had this before.
+
+
+#I think this would be a good plot, but adding the diluted samples as an additional relationship.
 ```
 
 
