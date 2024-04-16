@@ -14,6 +14,7 @@ library(here)
 library(patchwork)
 library(readxl)
 library(ggpmisc)
+library(pals)
 ```
 
 ```{r}
@@ -217,7 +218,8 @@ chl_sf_qu39 <- chl %>%
   group_by(date, site_id, line_out_depth) %>% 
   mutate(sf_sum = sum(chla)) %>% 
   ungroup() %>% 
-  select(date, site_id, year, chla)
+  select(date, year, site_id, line_out_depth, sf_sum) %>% 
+  distinct()
 
 chl_bulk_qu39 <- chl_bulk %>%
   mutate(year = lubridate::year(date)) %>%
@@ -230,31 +232,171 @@ chl_bulk_qu39 <- chl_bulk %>%
 formula <- y~x
 
 #Plotting all data with ADL flags a separate group with a separate regression line
-chl_bulk_qu39 %>% 
-  mutate(year = lubridate::year(date)) %>% 
+fig_ad_sf <- chl_bulk_qu39 %>% 
+  mutate(year = lubridate::year(date),
+         analyzed_date = lubridate::date(analyzed)) %>% 
   filter(is.na(chla_flag) & line_out_depth < 50) %>%
-  ggplot(aes(x = chla, y = sf_transfo)) +
-  geom_point(aes(fill = as.factor(year)), pch = 21, size = 5) +
-  geom_smooth(method = "lm", color = "black", formula = y~x-1, 
+  ggplot(aes(x = chla, y = sf_sum)) +
+  geom_point(aes(fill = as.factor(analyzed_date)), pch = 21, size = 7) +
+  geom_smooth(method = "lm", color = "black", formula = y~x, 
               fullrange = TRUE, se = F, size = 2) +
   scale_fill_brewer(palette = "RdYlBu") +
   stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~")), 
                formula = formula, parse = TRUE, size = 8) +
   geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~site_id) +
-  labs(x = "TChla (ug/L)",
-       y = "Chla (ug/L)",
+  # facet_wrap(~site_id) +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "SF Sum Chla (ug/L)",
+       fill = "Analyzed Date") +
+  ggtitle("QU39 2023 Data") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        text = element_text(size = 32),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text = element_text(colour = "black"))
+
+fig_month_sf <- chl_bulk_qu39 %>% 
+  mutate(year = lubridate::year(date),
+         month = lubridate::month(date),
+         analyzed_date = lubridate::date(analyzed)) %>% 
+  filter(is.na(chla_flag) & line_out_depth < 50) %>%
+  ggplot(aes(x = chla, y = sf_sum)) +
+  geom_point(aes(fill = as.factor(month)), pch = 21, size = 7) +
+  geom_smooth(method = "lm", color = "black", formula = y~x, 
+              fullrange = TRUE, se = F, size = 2) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~")), 
+               formula = formula, parse = TRUE, size = 8) +
+  geom_abline(intercept = 0, slope = 1) +
+  # facet_wrap(~site_id) +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "SF Sum Chla (ug/L)",
+       fill = "Month") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        text = element_text(size = 32),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text = element_text(colour = "black"))
+
+fig_depth_sf <- chl_bulk_qu39 %>% 
+  mutate(year = lubridate::year(date),
+         month = lubridate::month(date),
+         analyzed_date = lubridate::date(analyzed)) %>% 
+  filter(is.na(chla_flag) & line_out_depth < 50) %>%
+  ggplot(aes(x = chla, y = sf_sum)) +
+  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 7) +
+  geom_smooth(method = "lm", color = "black", formula = y~x, 
+              fullrange = TRUE, se = F, size = 2) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~")), 
+               formula = formula, parse = TRUE, size = 8) +
+  geom_abline(intercept = 0, slope = 1) +
+  # facet_wrap(~site_id) +
+  labs(x = "Bulk Chla (ug/L)",
+       y = "SF Sum Chla (ug/L)",
        fill = "Depth") +
   theme_bw() +
   theme(strip.background = element_blank(),
         text = element_text(size = 32),
         axis.text = element_text(colour = "black"))
+
+fig_sf_bulk <- fig_ad_sf / fig_month_sf / fig_depth_sf
+
         # legend.position = c(0.79, 0.19))
 
 #Should add HPLC and fluorescence to this and print for viewing.
-ggsave(here("figures_qc", "scatter_no_flag_core_station_year.png"),
-        width = 14, height = 12, dpi = 300)
+ggsave(here("figures_qc", "scatter_sf_bulk_2023.png"), fig_sf_bulk,
+        width = 10, height = 16, dpi = 300)
 ```
+```{r}
+
+formula <- y~x
+
+#Plotting all data with ADL flags a separate group with a separate regression line
+fig_ad_hplc <- chl_bulk_qu39 %>% 
+  mutate(year = lubridate::year(date),
+         analyzed_date = lubridate::date(analyzed)) %>% 
+  filter(is.na(chla_flag) & line_out_depth < 50) %>%
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = as.factor(analyzed_date)), pch = 21, size = 7) +
+  geom_smooth(method = "lm", color = "black", formula = y~x, 
+              fullrange = TRUE, se = F, size = 2) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~")), 
+               formula = formula, parse = TRUE, size = 8) +
+  geom_abline(intercept = 0, slope = 1) +
+  # facet_wrap(~site_id) +
+  labs(x = "TChla Chla (ug/L)",
+       y = "Bulk Chla (ug/L)",
+       fill = "Analyzed Date") +
+  ggtitle("QU39 2023 Data") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        text = element_text(size = 32),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text = element_text(colour = "black"))
+
+fig_month_hplc <- chl_bulk_qu39 %>% 
+  mutate(year = lubridate::year(date),
+         month = lubridate::month(date),
+         analyzed_date = lubridate::date(analyzed)) %>% 
+  filter(is.na(chla_flag) & line_out_depth < 50) %>%
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = as.factor(month)), pch = 21, size = 7) +
+  geom_smooth(method = "lm", color = "black", formula = y~x, 
+              fullrange = TRUE, se = F, size = 2) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~")), 
+               formula = formula, parse = TRUE, size = 8) +
+  geom_abline(intercept = 0, slope = 1) +
+  # facet_wrap(~site_id) +
+  labs(x = "TChla Chla (ug/L)",
+       y = "Bulk Chla (ug/L)",
+       fill = "Month") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        text = element_text(size = 32),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text = element_text(colour = "black"))
+
+fig_depth_hplc <- chl_bulk_qu39 %>% 
+  mutate(year = lubridate::year(date),
+         month = lubridate::month(date),
+         analyzed_date = lubridate::date(analyzed)) %>% 
+  filter(is.na(chla_flag) & line_out_depth < 50) %>%
+  ggplot(aes(x = all_chl_a, y = chla)) +
+  geom_point(aes(fill = as.factor(line_out_depth)), pch = 21, size = 7) +
+  geom_smooth(method = "lm", color = "black", formula = y~x, 
+              fullrange = TRUE, se = F, size = 2) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~")), 
+               formula = formula, parse = TRUE, size = 8) +
+  geom_abline(intercept = 0, slope = 1) +
+  # facet_wrap(~site_id) +
+  labs(x = "TChla Chla (ug/L)",
+       y = "Bulk Chla (ug/L)",
+       fill = "Depth") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        text = element_text(size = 32),
+        axis.text = element_text(colour = "black"))
+
+fig_sf_hplc <- fig_ad_hplc / fig_month_hplc / fig_depth_hplc
+
+        # legend.position = c(0.79, 0.19))
+
+#Should add HPLC and fluorescence to this and print for viewing.
+ggsave(here("figures_qc", "scatter_tchla_bulk_2023.png"), fig_sf_hplc,
+        width = 10, height = 16, dpi = 300)
+```
+
+
+
+
 
 
 

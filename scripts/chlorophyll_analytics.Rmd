@@ -179,7 +179,7 @@ ggsave(here("figs_invent", "sample_numbers_group_2023.png"),
 
 ```{r}
 chl_2023_calvert <- c_23_all %>% 
-  filter(group == "Calvert OCGY" ) %>%
+  filter(group == "Calvert OCGY" | group == "Quadra OCGY") %>%
   filter(!is.na(filter_type)) %>% 
   group_by(site_id, filter_type) %>% 
   summarise(n_filt = n()) %>% 
@@ -190,33 +190,66 @@ chl_2023_calvert <- arrange(mutate(chl_2023_calvert, filter_type = factor(filter
 
 #Calculating total number of samples per group
 totals_2023_calvert <- c_23_all %>%
-  filter(group == "Calvert OCGY" ) %>%
+  filter(group == "Calvert OCGY" | group == "Quadra OCGY") %>%
   group_by(site_id) %>%
   summarize(n_tot = n()) %>% 
   ungroup()
 
 
-chl_2023_calvert %>% 
+f1 <- chl_2023_calvert %>% 
   ggplot(aes(x = reorder(site_id, n_filt), y = n_filt, fill = filter_type)) +
   geom_bar(stat = "identity", color = "black") +
   geom_text(aes(x = site_id, y = n_tot, label = n_tot, fill = NULL),
               data = totals_2023_calvert, vjust = -0.5, size = 8) +
-  ylim(0, 300) +
+  ylim(0, 1300) +
   ggsci::scale_fill_npg(name = "Filter Size") +
   ylab("# of samples") +
   ggtitle(2023) +
   theme_bw() +
   theme(legend.position = c(0.13, 0.8),
         axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        # axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(color = "black"),
+        text = element_text(size = 25, 
+                            color = "black"))
+
+chl_2023_depth <- c_23_all %>% 
+  filter(group == "Calvert OCGY" | group == "Quadra OCGY") %>%
+  filter(!is.na(filter_type)) %>% 
+  group_by(site_id, line_out_depth) %>% 
+  summarise(n_filt = n()) %>% 
+  ungroup() 
+
+f2 <- chl_2023_depth %>% 
+  ggplot(aes(x = reorder(site_id, n_filt), y = n_filt, fill = as.factor(line_out_depth))) +
+  geom_bar(stat = "identity", color = "black") +
+  geom_text(aes(x = site_id, y = n_tot, label = n_tot, fill = NULL),
+              data = totals_2023_calvert, vjust = -0.5, size = 8) +
+  ylim(0, 1300) +
+  scale_fill_brewer(palette = "RdYlBu", name = "Depth") +
+  ylab("# of samples") +
+  theme_bw() +
+  theme(legend.position = c(0.13, 0.7),
+        axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text = element_text(color = "black"),
         text = element_text(size = 25, 
                             color = "black"))
 
-ggsave(here("figs_invent", "sample_numbers_calvert_2023_2.png"), 
-       width = 8, height = 6, dpi = 300)
+fig <- f1/f2
+
+ggsave(here("figs_invent", "sample_numbers_calvert_quadra_2023_2.png"), fig,
+       width = 8, height = 12, dpi = 300)
 ```
 
+```{r}
+qu39_sf_2dep <- c_23_all %>%
+  filter(site_id == "QU39" & line_out_depth < 9 & !filter_type == "Bulk GF/F") 
+
+qu39_bulk <- c_23_all %>%   
+  filter(site_id == "QU39" & filter_type == "Bulk GF/F")
+```
 
 
 ```{r}
@@ -371,7 +404,7 @@ f4 <- ggcorrplot(corr_k_20,
   theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
+        # axis.text.y = element_blank(),
         axis.text = element_text(color = "black"),
         legend.position = "none",
         text = element_text(size = 35))
@@ -514,7 +547,8 @@ c_sf %>%
   theme(strip.background = element_blank(),
         text = element_text(size = 35),
         axis.text = element_text(colour = "black"),
-        legend.position = "none")
+        legend.position = "none",
+        panel.spacing = unit(2, "lines"))
 
 ggsave(here("figs_invent", "Depth_mean_sf_median_perc.png"), 
        width = 20, height = 12, dpi = 300)
@@ -522,7 +556,24 @@ ggsave(here("figs_invent", "Depth_mean_sf_median_perc.png"),
 
 
 ```{r}
+c_sf %>% 
+  filter(line_out_depth < 50 & !filter_type == "2um") %>% 
+  ggplot(aes(x = sf_sum, y = sf_perc*100, fill = as.factor(line_out_depth))) +
+  geom_point(pch = 21, size = 6) + 
+  geom_vline(xintercept = 5) +
+  scale_fill_brewer(palette = "RdYlBu", name = "Depth") +
+  facet_grid(filter_type ~ site_id) +
+  labs(x = "Chla (ug/L)",
+       y = "% Contribution") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2),
+        axis.text = element_text(color = "black"),
+        text = element_text(size = 40, 
+                            color = "black"),
+        strip.background = element_blank())
 
+ggsave(here("figs_invent", "scatter_chlorophyll_percent_size.png"),
+       width = 16, height = 16, dpi = 300)
 ```
 
 
