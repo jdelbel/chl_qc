@@ -165,6 +165,8 @@ fig <- f1/f2
 ggsave(here("figs_invent", "chl_max_dep.png"), fig,
        width = 13, height = 12, dpi = 300)
 ```
+
+
 ```{r}
 #Want to look at how similar 0 and 5m depth are biomass wise.
 

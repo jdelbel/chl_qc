@@ -15,6 +15,7 @@ library(patchwork)
 library(readxl)
 library(ggpmisc)
 library(pals)
+library(scales)
 ```
 
 ```{r}
@@ -177,10 +178,12 @@ ggsave(here("figures_qc", "timeseries_qu39_bulk_tchla_2023.png"),
         width = 16, height = 12, dpi = 300)
 ```
 ```{r}
+formula <- y~x
+
 chl_bulk %>% 
   mutate(year = lubridate::year(date)) %>% 
   filter(is.na(chla_flag) & line_out_depth < 50 & year == 2023 & site_id == "QU39") %>%
-  ggplot(aes(x = all_chl_a, y = chla)) +
+  ggplot(aes(y = log1p(all_chl_a), x = log1p(chla))) +
   geom_point(aes(fill = as.factor(dilution_factor)), pch = 21, size = 5) +
   geom_smooth(method = "lm", color = "black", formula = y~x-1, 
               fullrange = TRUE, se = F, size = 2) +
@@ -188,6 +191,12 @@ chl_bulk %>%
   stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~")), 
                formula = formula, parse = TRUE, size = 8) +
   geom_abline(intercept = 0, slope = 1) +
+  # scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+  #             labels = trans_format("log10", math_format(10^.x)),
+  #             limits = c(10^-2, 10^2)) +
+  # scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+  #             labels = trans_format("log10", math_format(10^.x)),
+  #             limits = c(10^-2, 10^2)) +
   facet_wrap(~site_id) +
   labs(x = "TChla (ug/L)",
        y = "Chla (ug/L)",
@@ -227,6 +236,8 @@ chl_bulk_qu39 <- chl_bulk %>%
   left_join(chl_sf_qu39)
   
 ```
+
+
 ```{r}
 
 formula <- y~x
@@ -311,6 +322,8 @@ ggsave(here("figures_qc", "scatter_sf_bulk_2023.png"), fig_sf_bulk,
         width = 10, height = 16, dpi = 300)
 ```
 ```{r}
+# perform log-linear regressions on HPLC determined total chlorophyll a (chlorophyllide a, chlorophyll a epimer, chlorophyll a allomer, monovinyl chlorophyll a and divinyl chlorophyll a) and fluorometrically determined chlorophyll a, using model I regressions. Standard Model I regressions were selected because HPLC determined total chlorophyll a concentrations are to be predicted from fluorometrically determined chlorophyll [Model I regressions are appropriate for both predictions and determining functional relationships, whereas Model II regressions should not be used to predict values of y given x (page 543, Sokal and Rohlf 1995)].
+
 
 formula <- y~x
 
@@ -327,6 +340,12 @@ fig_ad_hplc <- chl_bulk_qu39 %>%
   stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~")), 
                formula = formula, parse = TRUE, size = 8) +
   geom_abline(intercept = 0, slope = 1) +
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+              labels = trans_format("log10", math_format(10^.x)),
+              limits = c(10^-2, 10^2)) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+              labels = trans_format("log10", math_format(10^.x)),
+              limits = c(10^-2, 10^2)) +
   # facet_wrap(~site_id) +
   labs(x = "TChla Chla (ug/L)",
        y = "Bulk Chla (ug/L)",
